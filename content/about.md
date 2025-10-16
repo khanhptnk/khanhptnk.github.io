@@ -1,0 +1,17 @@
+---
+title: About me
+date: 3000-12-31
+---
+
+Prior to joining Microsoft, I was a Postdoctoral Research Fellow of the [Center for Human-Compatible Artificial Intelligence (CHAI)](https://humancompatible.ai/) at the University of California--Berkeley, where I was fortunate to be mentored by Prof. [Stuart Russell](http://people.eecs.berkeley.edu/~russell), who co-wrote the best-selling [Introduction textbook on AI](https://aima.cs.berkeley.edu/) and invented the [mathematical foundations](https://arxiv.org/abs/1606.03137) for human-AI alignment. Before that, I was a postdoc at the [Princeton NLP group](https://princeton-nlp.github.io/) working with Prof. [Karthik Narasimhan](https://www.cs.princeton.edu/~karthikn/), a pioneer in AI agents. I obtained my PhD at the University of Maryland--College Park, advised by the great [Hal Daumé III](http://users.umiacs.umd.edu/~hal/).
+
+My <a href="assets/pdf/2024-statements/2024-research-statement.pdf">research statement</a> summarizes my research accomplishments and vision. At a high level, I create artificial agents that have the communication skills and incentives to assist humans. Specifically, I explore the following questions: 
+* **How to enable AI agents to learn from natural human feedback (listening skill)**: My [\[EMNLP'17\]](https://arxiv.org/abs/1508.05154) paper demonstrated for the first time the feasibility of using only *noisy, complete-output ratings* to improve the performance of a *neural text generator*. This work was followed by studies that used real human ratings at eBay and OpenAI, ultimately leading to the development of InstructGPT that popularized RLHF. <br/>More recently, I have been developing frameworks for *learning from language feedback* with theoretical guarantees [\[ICML'21](https://arxiv.org/abs/2102.07024), [ACL'24WS\]](https://arxiv.org/abs/2310.13004). 
+* **How to identify and share with humans what AI agents know and do not know (speaking skill)**: I was an early explorer of *calibration analysis* for NLP models [\[EMNLP'15'\]](https://arxiv.org/abs/1508.05154) and pioneered the development of robots that *ask for help* [\[CVPR'19](https://arxiv.org/abs/1812.04155), [EMNLP'19](https://arxiv.org/abs/1909.01871), [ICML'22\]](https://arxiv.org/abs/2110.08258). Lately, I develop models that *guide human navigation with language*, improving their pragmatic reasoning capability [\[ACL'23\]](https://arxiv.org/abs/2301.05149) and making them useful even when they generate inaccurate instructions [[EMNLP'24]](https://arxiv.org/abs/2402.16973).
+* **How to drive AI agents toward efficient and beneficial communicative behavior (incentive)**: I create agents that *learn with progressive efficiency* [[NeurIPS'23WS]](https://arxiv.org/abs/2310.13004), i.e. the more you talk to them, the less effort it will take to teach them. In an ongoing work, I characterize the limitations of the popular RLHF approach and propose a *new alignment framework* that emphasizes alignment with not only with the human principal but also with reality.
+
+Some personal facts:
+* My real name is Nguyễn Xuân Khánh <a href="assets/nguyen_xuan_khanh.mp3" target="_blank">📢</a>. My first name (Khánh) means "joy" or "happiness". Please do not confuse it with `Khan` or `Kahn` :(
+* I was born in Việt Nam :vietnam:</a>, a *peaceful* country (click [here](https://www.youtube.com/watch?v=wC7N4xz7B8w) for inspiration to visit us).
+* I am also proud to be a PTNK (Phổ Thông Năng Khiếu) alumnus.
+
