@@ -2,7 +2,7 @@
 title: Hello World!
 ---
 
-I am an Applied Scientist at Microsoft. My daily job is improving [M365 Copilot](https://www.microsoft.com/en-us/microsoft-365-copilot). [More](/about) about me.  
+I am a Senior Applied Scientist at Microsoft, where I develop AI agents for enterprises. [More](/about) about me.  
 
 This space is where I share my *personal* thoughts and ideas. 
 
