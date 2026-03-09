@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx quartz sync)",
+      "Bash(npm install)"
+    ]
+  }
+}
