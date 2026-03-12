@@ -1,3 +1,11 @@
 @use "./base.scss";
 
-// put your custom CSS here!
+// Readability improvements
+html {
+  font-size: 16px;
+}
+
+p, li {
+  line-height: 1.75;
+  margin-bottom: 0.75em;
+}
