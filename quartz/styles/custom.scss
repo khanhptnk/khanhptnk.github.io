@@ -9,3 +9,15 @@ p, li {
   line-height: 1.75;
   margin-bottom: 0.75em;
 }
+
+// Math callout types
+.callout {
+  &[data-callout="claim"],
+  &[data-callout="lemma"],
+  &[data-callout="theorem"] {
+    --color: #4a9eed;
+    --border: #4a9eed55;
+    --bg: #4a9eed0d;
+    --callout-icon: var(--callout-icon-abstract);
+  }
+}
