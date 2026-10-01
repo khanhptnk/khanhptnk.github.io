@@ -30,10 +30,12 @@ This post builds the smallest example I could find where that difference is all 
 3. **The reason is whose future gets scored.** The tie breaks only when an action is credited with the agreement the
    *learner* goes on to achieve, not the agreement the expert would.
 
-None of this is new as a phenomenon. It is the *imitation gap* of learning from a privileged expert
-([Weihs et al., 2021](https://arxiv.org/abs/2007.12173)), and it is closely related to the roll-in/roll-out analyses of
-learning to search (see [Related work](#related-work)). The toy just isolates the mechanism cleanly enough that DAgger's
-behavior can be derived exactly and checked against the runs. All code is at
+Neither the phenomenon nor the method is new. The phenomenon is the *imitation gap* of learning from a privileged expert
+([Weihs et al., 2021](https://arxiv.org/abs/2007.12173)). The method, RL on a per-step expert-agreement reward over the
+learner's own roll-outs, directly optimizes the objective DAgger was designed to approximate, and close variants exist in
+learning to search, LLM distillation and motion imitation (see [Related work](#related-work)). What the toy adds is a
+construction clean enough to derive DAgger's behavior exactly and check it against the runs, and to show that looking
+ahead with the expert's cost-to-go doesn't break the tie. All code is at
 [github.com/khanhptnk/future-aware-imitation](https://github.com/khanhptnk/future-aware-imitation) and runs on a CPU in
 under a minute.
 
@@ -159,8 +161,19 @@ recoverable mistake.
 
 ## Related work
 
-The phenomenon has been studied from several directions.
+The phenomenon has been studied from several directions, and the RL method is a known one.
 
+- **The objective, and RL on it.** [Ross et al. (2011)](https://arxiv.org/abs/1011.0686) define imitation's goal as
+  minimizing the expected per-step loss under the learner's own state distribution. With 0-1 loss over 9 steps, that is
+  the expected number of disagreements, an affine function of $J$ here. DAgger gets there through a reduction to no-regret
+  online learning, which fits each iteration's data as if that distribution were fixed. Its guarantee is good when some
+  policy in the class imitates the expert well on that data, and weak here, where none can. Optimizing $J$ directly on
+  the learner's own roll-outs has close precedents. [LOLS](https://arxiv.org/abs/1502.02206) with learned roll-outs
+  scores each action by rolling out the learner and counting disagreements with the reference.
+  [MiniLLM](https://arxiv.org/abs/2306.08543) distills a language model with policy gradients on the teacher's scores of
+  the student's own tokens, a soft version of the agreement reward. [DeepMimic](https://arxiv.org/abs/1804.02717) trains
+  with PPO on a per-step reward for tracking a reference motion. [SQIL](https://arxiv.org/abs/1905.11108) runs RL with a
+  reward of 1 on demonstrated transitions and 0 elsewhere, from demonstrations rather than expert queries.
 - **The imitation gap.** [Weihs et al. (2021)](https://arxiv.org/abs/2007.12173) name it: when the expert has privileged
   information, imitation converges to the expert's actions averaged over what the learner can't see, which can be far
   from the best policy the learner could execute. Their ADVISOR method weights imitation and RL losses state by state,
@@ -175,8 +188,8 @@ The phenomenon has been studied from several directions.
   reference is optimal, but the learner can't follow it.
 
 What the toy adds is a construction where the effect has nowhere else to come from: the root has a unique observation,
-parameters are not shared, the expert rule is the same everywhere, and DAgger's indifference is exact rather than
-empirical.
+parameters are not shared, the expert rule is the same everywhere, and DAgger's indifference (and AggreVaTe's) is exact
+rather than empirical.
 
 ## What to take away
 
@@ -223,6 +236,9 @@ returns only to choose among unavoidable mistakes.
 - Luca Weihs, Unnat Jain, Iou-Jen Liu, Jordi Salvador, Svetlana Lazebnik, Aniruddha Kembhavi and Alexander Schwing, [Bridging the Imitation Gap by Adaptive Insubordination](https://arxiv.org/abs/2007.12173), NeurIPS 2021.
 - Andrew Warrington, J. Wilder Lavington, Adam Ścibior, Mark Schmidt and Frank Wood, [Robust Asymmetric Learning in POMDPs](https://arxiv.org/abs/2012.15566), ICML 2021.
 - Gokul Swamy, Sanjiban Choudhury, J. Andrew Bagnell and Zhiwei Steven Wu, [Sequence Model Imitation Learning with Unobserved Contexts](https://arxiv.org/abs/2208.02225), NeurIPS 2022.
+- Yuxian Gu, Li Dong, Furu Wei and Minlie Huang, [MiniLLM: On-Policy Distillation of Large Language Models](https://arxiv.org/abs/2306.08543), ICLR 2024.
+- Xue Bin Peng, Pieter Abbeel, Sergey Levine and Michiel van de Panne, [DeepMimic: Example-Guided Deep Reinforcement Learning of Physics-Based Character Skills](https://arxiv.org/abs/1804.02717), SIGGRAPH 2018.
+- Siddharth Reddy, Anca D. Dragan and Sergey Levine, [SQIL: Imitation Learning via Reinforcement Learning with Sparse Rewards](https://arxiv.org/abs/1905.11108), ICLR 2020.
 - John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford and Oleg Klimov, [Proximal Policy Optimization Algorithms](https://arxiv.org/abs/1707.06347), 2017.
 - Zhihong Shao et al., [DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models](https://arxiv.org/abs/2402.03300), 2024. (GRPO)
 - Code: [github.com/khanhptnk/future-aware-imitation](https://github.com/khanhptnk/future-aware-imitation).
