@@ -21,3 +21,21 @@ p, li {
     --callout-icon: var(--callout-icon-abstract);
   }
 }
+
+// Figures rendered once per theme: <img class="theme-light"> and <img class="theme-dark"> side by side.
+// The dark-mode toggle sets saved-theme on <html> (quartz/components/scripts/darkmode.inline.ts).
+:root[saved-theme="dark"] img.theme-light,
+:root:not([saved-theme="dark"]) img.theme-dark {
+  display: none;
+}
+
+// Image figures only: Quartz wraps code blocks in <figure data-rehype-pretty-code-figure> too.
+figure:not([data-rehype-pretty-code-figure]) {
+  margin: 1.5rem 0;
+
+  figcaption {
+    font-size: 0.9rem;
+    color: var(--darkgray);
+    margin-top: 0.4rem;
+  }
+}
