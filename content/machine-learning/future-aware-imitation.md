@@ -29,6 +29,10 @@ This post builds the smallest example I could find where that difference is all 
    success metric from 54% to 96%.
 3. **The reason is whose future gets scored.** The tie breaks only when an action is credited with the agreement the
    *learner* goes on to achieve, not the agreement the expert would.
+4. **The same happens in distillation into a smaller student.** When the teacher's own path leads to behavior the
+   student is too small to imitate, DAgger and the per-token distillation objectives (on-policy forward KL, and reverse KL
+   with a discount of zero) follow the teacher anyway. Objectives with returns, including the sequence-level reverse KL,
+   learn to leave the teacher's path at the first step.
 
 The phenomenon isn't new: it is the *imitation gap* of learning from a privileged expert
 ([Weihs et al., 2021](https://arxiv.org/abs/2007.12173)). Neither is the idea of fixing it with returns: crediting a
@@ -37,9 +41,10 @@ and LLM distillation (see [Related work](#related-work)). I haven't found this e
 agreement reward with returns, studied as an imitation method, but small differences in the reward or the optimizer can
 change behavior a lot, so the closest ones are listed there with how they differ. What the toy adds is a construction
 clean enough to derive DAgger's behavior exactly and check it against the runs, and to show that looking ahead with the
-expert's cost-to-go doesn't break the tie. All code is at
+expert's cost-to-go doesn't break the tie. A distillation version shows which of today's on-policy distillation
+objectives can leave a teacher's path that the student can't follow. All code is at
 [github.com/khanhptnk/future-aware-imitation](https://github.com/khanhptnk/future-aware-imitation) and runs on a CPU in
-under a minute.
+a few minutes.
 
 ## The environment
 
@@ -161,6 +166,92 @@ recoverable.*
 Same picture: DAgger sits at $\tfrac{1}{2}$ (its exact success rate is $75.88\%$), and both RL methods learn to make the
 recoverable mistake.
 
+## Distillation into a smaller student
+
+In both environments so far, the learner fails because it can't see what the expert sees. The other common reason is
+capacity. In distillation, the student sees exactly what the teacher sees and is simply smaller. The same question
+applies: when the student can't follow the teacher, does it learn to go somewhere it can?
+
+**Setup.** No information is hidden. The episode is a root decision followed by 8 steps in one of two branches, chosen by
+the root action, and the student observes the branch and the step $t$. The teacher plays action 0 at the root, so its
+own path is branch 0, where it plays the parity of $t$ ($1, 0, 1, 0, \dots$). In branch 1 it always plays 0. The student
+has its own logit at the root and, in each branch, a logistic policy whose logit is a polynomial of degree $k$ in $t$.
+Degree 7 is enough to fit the parity of 8 steps, so a student with $k = 7$ can imitate the teacher perfectly. A
+polynomial of degree $k$ changes sign at most $k$ times, so on the teacher's path a smaller student makes at least
+$\lceil (7 - k)/2 \rceil$ errors. Leaving the teacher's path at the root costs exactly one error, and branch 1 is easy at
+any size.
+
+**A deterministic teacher.** DAgger's label at the root is always 0, so it always follows the teacher; this is exact, at
+every student size. AggreVaTe follows too: the teacher's cost-to-go assumes the teacher finishes the episode, and the
+teacher imitates itself perfectly in either branch, so copying the root action wins. PPO and GRPO are trained on the
+same $\pm 1$ agreement reward as before:
+
+<figure>
+<img class="theme-light" src="../assets/future-aware-imitation/distill-light.svg" alt="Disagreements per episode against the student's polynomial degree from 0 to 7. DAgger falls from 4 errors at degree 0 to 2.5 at degree 6, always above the fewest errors possible when copying the teacher, and reaches 0 at degree 7. PPO and GRPO stay at about 1 error at every degree, the cost of leaving the teacher's path.">
+<img class="theme-dark" src="../assets/future-aware-imitation/distill-dark.svg" alt="Disagreements per episode against the student's polynomial degree from 0 to 7. DAgger falls from 4 errors at degree 0 to 2.5 at degree 6, always above the fewest errors possible when copying the teacher, and reaches 0 at degree 7. PPO and GRPO stay at about 1 error at every degree, the cost of leaving the teacher's path.">
+<figcaption>Figure 4. Distillation from a deterministic teacher into students of increasing size (mean over 12 seeds; seed-to-seed standard deviations are at most 0.01). The dotted steps are the fewest errors a student of that size can make on the teacher's path.</figcaption>
+</figure>
+
+- **Below degree 7, DAgger pays for following the teacher:** 2.5 to 4 errors per episode. That is more than the fewest
+  possible on the teacher's path, because maximum likelihood on labels the student can't fit gives soft probabilities,
+  not the policy with the fewest errors. (Degrees pair up, 1 with 2 and so on, because the teacher's labels at $t$ and
+  $9 - t$ are opposite, so even-degree terms don't help.)
+- **PPO and GRPO leave the teacher's path** in 98% to 99.8% of episodes and make about one error per episode, at every
+  size below 7.
+- **At degree 7 the roles reverse.** DAgger imitates perfectly. PPO still leaves the teacher's path in 90% of episodes
+  (0.95 errors). The other branch is easy to learn, so RL commits to it early, and from then on it rarely visits the
+  teacher's path, so it gets little signal to return. When imitation is realizable, supervised labels win.
+
+**A stochastic teacher.** Language-model teachers are distributions, and the standard distillation objectives compare
+distributions. So make the teacher put probability 0.9 on the action above in every state, including the root, and 0.1
+on the other. Then compare four ways of training the student on its own roll-outs, with the teacher queried at every
+state the student visits:
+
+- **On-policy forward KL:** cross-entropy to the teacher's distribution at the student's states, which is DAgger with
+  soft labels (GKD's forward KL, and the "DAgger-style on-policy SFT" of my
+  [previous post](./kl-penalty-in-grpo)).
+- **Reverse KL with a discount of zero:** a per-token reward $\log \pi_T(a \mid s) - \log \pi_S(a \mid s)$, with each token
+  credited only with its own reward, as in
+  [Thinking Machines' on-policy distillation](https://thinkingmachines.ai/blog/on-policy-distillation/).
+- **Reverse KL with returns:** the same reward with undiscounted returns, which follows the gradient of the
+  sequence-level reverse KL $\mathrm{KL}(P_S \,\|\, P_T)$ (the first row of Table 1 in the previous post).
+- **$\pm 1$ agreement:** PPO with $+1$ for agreeing with the teacher's preferred action and $-1$ otherwise.
+
+The RL variants share the update used throughout. An episode has only $2 \times 2^8 = 512$ action sequences, so every
+metric is computed exactly by summing over all of them.
+
+<figure>
+<img class="theme-light" src="../assets/future-aware-imitation/distill-soft-light.svg" alt="Two panels against the student's degree. Left, the probability of leaving the teacher's path: on-policy forward KL and reverse KL with discount zero stay at the teacher's 0.1 at every degree; reverse KL with returns leaves with probability 0.87 at degree 0, falling to 0.56 at degree 6 and 0.2 at degree 7; plus-minus-one agreement leaves with probability near 1. Right, disagreements per episode: the two per-token objectives fall from 3.8 to 2.6, then to about 1 at degree 7; reverse KL with returns stays near 2.1 to 2.2, dropping to 1.7 at degree 7; plus-minus-one agreement stays near 1.">
+<img class="theme-dark" src="../assets/future-aware-imitation/distill-soft-dark.svg" alt="Two panels against the student's degree. Left, the probability of leaving the teacher's path: on-policy forward KL and reverse KL with discount zero stay at the teacher's 0.1 at every degree; reverse KL with returns leaves with probability 0.87 at degree 0, falling to 0.56 at degree 6 and 0.2 at degree 7; plus-minus-one agreement leaves with probability near 1. Right, disagreements per episode: the two per-token objectives fall from 3.8 to 2.6, then to about 1 at degree 7; reverse KL with returns stays near 2.1 to 2.2, dropping to 1.7 at degree 7; plus-minus-one agreement stays near 1.">
+<figcaption>Figure 5. Distillation from a stochastic teacher (mean over 12 seeds). Blue objectives credit each token only with its own score; orange ones use returns. Disagreements are counted against the teacher's preferred action; the teacher itself averages 0.9.</figcaption>
+</figure>
+
+*Table 3. Stochastic teacher, student of degree 1 (12 seeds, exact evaluation). "Leave" is the probability of leaving
+the teacher's path at the root. Reverse KL is $\mathrm{KL}(P_S \Vert P_T)$ and forward KL is $\mathrm{KL}(P_T \Vert P_S)$,
+both over whole episodes, in nats.*
+
+| Objective | Leave | Errors | Success | Rev. KL | Fwd. KL |
+|---|---|---|---|---|---|
+| Teacher | 0.10 | 0.90 | 94.7% | 0 | 0 |
+| Forward KL | 0.100 | 3.64 | 23.1% | 3.49 | 2.54 |
+| Reverse KL, γ = 0 | 0.103 | 3.61 | 23.7% | 3.47 | 2.55 |
+| Reverse KL, returns | 0.840 | 2.12 | 71.1% | 2.13 | 3.90 |
+| ±1 agreement | 0.998 | 1.01 | 99.8% | 3.11 | 14.2 ± 1.8 |
+
+- **Per-token objectives follow the teacher at every student size.** Both leave the teacher's path with the teacher's own
+  probability, 0.1. With the root's own parameter, each one's target at the root is to match the teacher there,
+  whatever comes after, so the root decision can't see what the student can do downstream.
+- **Objectives with returns leave.** Where the optimum of the sequence-level reverse KL can be worked out by hand, reverse KL
+  with returns reaches it. For $k = 0$, the student's best policy on the teacher's path is a coin flip, which costs
+  $8\,\mathrm{KL}(\mathrm{Bern}(0.5) \,\|\, \mathrm{Bern}(0.9)) = 4.087$ nats. The optimum then leaves with probability
+  $0.1 / (0.1 + 0.9\,e^{-4.087}) = 0.869$, at a KL of 2.162 nats; training reaches 0.866 and 2.162.
+- **The two optimize different things.** $\pm 1$ agreement goes after the teacher's preferred action and collapses to a
+  nearly deterministic student: almost no errors, but far from the teacher's distribution (a forward KL of 14 nats,
+  with large variation across seeds). Reverse KL with returns stays a distribution and trades errors for KL; it has the
+  lowest reverse KL of the four, which is its objective.
+- **At degree 7 the per-token objectives win again.** On-policy forward KL matches the teacher exactly, and reverse KL with
+  a discount of zero nearly does (0.05 nats). Reverse KL with returns hasn't converged after the same budget (0.54 nats).
+
 ## Related work
 
 - **The objective.** [Ross et al. (2011)](https://arxiv.org/abs/1011.0686) define imitation's goal as minimizing the
@@ -215,9 +306,13 @@ rather than empirical.
   per-step label treats them as equal, however different their consequences.
 - **Looking ahead isn't enough by itself.** What matters is whose future gets scored: the learner's (returns, learner
   roll-outs) breaks the tie, the expert's (expert roll-outs) doesn't.
+- **In distillation, per-token objectives follow the teacher where the student can't.** On-policy forward KL and
+  reverse KL with a discount of zero copy the teacher's choices regardless of what the student can do afterwards. The
+  sequence-level reverse KL, optimized with returns, leaves the teacher's path, and where its optimum can be computed
+  ($k = 0$) it leaves exactly as much as that optimum says.
 - **This doesn't make RL a better imitation learner.** When imitation is realizable, or the consequences of a mistake
   don't depend on which mistake it was, supervised labels are far more direct and sample-efficient, as the downstream
-  steps here show. The point is a regime: the long-horizon objective carries information the immediate label doesn't
+  steps here and the realizable students in the distillation experiments show. The point is a regime: the long-horizon objective carries information the immediate label doesn't
   have.
 
 ## Setup details
@@ -233,11 +328,18 @@ rather than empirical.
 - **GRPO-style:** 120 iterations × 192 groups of 8 trajectories that share $z$. Each trajectory's total return is
   normalized within its group and used as the advantage of all its actions; the same clipped update. No KL term or
   reference policy.
-- **Seeds:** 0–11 for training; evaluation on 50,000 episodes from `default_rng(9000 + seed)`.
+- **Distillation:** the student's features are Legendre polynomials of $t$ rescaled to $[-1, 1]$, one set per branch,
+  plus a root logit. DAgger and on-policy forward KL refit the student to the aggregated labels exactly (by Newton's
+  method), with the same pseudocount. The RL variants use the PPO settings above; each state's logit takes the mean
+  gradient over its samples, then the chain rule through the features.
+- **Seeds:** 0–11 for training; evaluation on 50,000 episodes from `default_rng(9000 + seed)`, except with the
+  stochastic teacher, where evaluation is exact.
 
 ## Limitations
 
-These are hand-built POMDPs with four-parameter tabular policies. They show a mechanism, not a practical advantage. The
+These are hand-built environments with policies of a few parameters. They show a mechanism, not a practical advantage.
+In the distillation experiments, the teacher's path is hard for the student by design, and the deviation is a single
+early choice; in a language model, the paths the student can follow are not marked out in advance. The
 success threshold is arbitrary: it is never used for training, but changing it changes the absolute numbers. PPO and
 GRPO see different numbers of episodes per iteration, so compare each with DAgger, not with each other. The natural next
 step is an environment where actions change what the learner can observe without being designed to, such as an agent
