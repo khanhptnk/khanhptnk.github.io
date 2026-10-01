@@ -30,9 +30,9 @@ This post builds the smallest example I could find where that difference is all 
 3. **The reason is whose future gets scored.** The tie breaks only when an action is credited with the agreement the
    *learner* goes on to achieve, not the agreement the expert would.
 
-Neither the phenomenon nor the method is new. The phenomenon is the *imitation gap* of learning from a privileged expert
+I don't claim the phenomenon or the method as new. The phenomenon is the *imitation gap* of learning from a privileged expert
 ([Weihs et al., 2021](https://arxiv.org/abs/2007.12173)). The method, RL on a per-step expert-agreement reward over the
-learner's own roll-outs, directly optimizes the objective DAgger was designed to approximate, and close variants exist in
+learner's own roll-outs, directly optimizes the objective DAgger was designed to approximate, and it has close relatives in
 learning to search, LLM distillation and motion imitation (see [Related work](#related-work)). What the toy adds is a
 construction clean enough to derive DAgger's behavior exactly and check it against the runs, and to show that looking
 ahead with the expert's cost-to-go doesn't break the tie. All code is at
@@ -173,7 +173,11 @@ The phenomenon has been studied from several directions, and the RL method is a 
   [MiniLLM](https://arxiv.org/abs/2306.08543) distills a language model with policy gradients on the teacher's scores of
   the student's own tokens, a soft version of the agreement reward. [DeepMimic](https://arxiv.org/abs/1804.02717) trains
   with PPO on a per-step reward for tracking a reference motion. [SQIL](https://arxiv.org/abs/1905.11108) runs RL with a
-  reward of 1 on demonstrated transitions and 0 elsewhere, from demonstrations rather than expert queries.
+  reward of 1 on demonstrated transitions and 0 elsewhere, from demonstrations rather than expert queries. Apart from
+  LOLS, which is the closest, these differ from the setup here in ways that can change behavior a lot: a soft score
+  instead of $\pm 1$, matching states instead of actions, fixed demonstrations instead of expert queries, and a teacher
+  that sees what the student sees. For example, the teacher's log-probability as a reward is $-\infty$ for every mistake
+  against a deterministic expert like this one, so it can't rank mistakes at all.
 - **The imitation gap.** [Weihs et al. (2021)](https://arxiv.org/abs/2007.12173) name it: when the expert has privileged
   information, imitation converges to the expert's actions averaged over what the learner can't see, which can be far
   from the best policy the learner could execute. Their ADVISOR method weights imitation and RL losses state by state,
