@@ -10,31 +10,48 @@ tags:
 # GRPO's KL penalty pulls toward the forward KL
 
 RL fine-tuning of language models usually keeps the policy $\pi_\theta$ close to a reference model $\pi_{\mathrm{ref}}$ with a
-KL penalty. The objective says *reverse* KL, $\mathrm{KL}(\pi_\theta \,\|\, \pi_{\mathrm{ref}})$. But how the penalty is
-implemented decides which gradient you actually get. The popular choice in GRPO, adding the $k_3$ estimator to the loss and
-backpropagating through it, follows the gradient of the *forward* KL instead.
+KL penalty, and the objective says which one: the *reverse* KL between the two models' distributions over responses,
+$\mathrm{KL}(P_\theta \,\|\, P_{\mathrm{ref}})$. But there are several common ways to implement that penalty, and they don't
+all follow its gradient. This post works out exactly which objective each one optimizes:
 
-That part has been pointed out before (see [References](#references)). This post derives it from scratch and then goes two
-steps further:
+*Table 1. What each implementation of the KL penalty optimizes, for responses $y$ sampled from the policy.
+$\mathrm{KL}_t(p \Vert q)$ is the KL between the next-token distributions $p(\cdot \mid y_{<t})$ and $q(\cdot \mid y_{<t})$ at
+prefix $y_{<t}$. "Prefixes frozen" means the expectation over prefixes $y_{<t} \sim P_\theta$ is held fixed when taking the
+gradient: it ignores that changing an early token changes which later prefixes the policy visits.*
 
-1. **Over whole sequences**, $k_3$ as a loss optimizes neither sequence-level KL. It is a forward KL at every position,
-   evaluated on prefixes the *policy* generated. In the taxonomy of [Zhao et al. (2026)](https://arxiv.org/abs/2605.16826),
-   that is DAgger-style on-policy SFT, with the reference model as the expert. I check this exactly on a small model.
-2. **In training**, that difference moves the fixed point. On a toy problem where everything can be computed exactly,
-   $k_3$ as a loss keeps far more entropy than the optimum of the objective it stands in for when the reward dominates,
-   and slightly less when the penalty dominates. A single picture of its gradient explains both.
+| Implementation | Follows the gradient of | In words |
+|---|---|---|
+| $k_1$ in the reward, with returns (PPO for RLHF) | $\mathrm{KL}(P_\theta \Vert P_{\mathrm{ref}})$ | the sequence-level reverse KL, as the objective says |
+| $k_2$ as a per-token loss | $\sum_t \mathbb{E}_{y_{<t}}\, \mathrm{KL}_t(\pi_\theta \Vert \pi_{\mathrm{ref}})$ | a reverse KL at every position, prefixes frozen |
+| $k_3$ as a per-token loss (GRPO) | $\sum_t \mathbb{E}_{y_{<t}}\, \mathrm{KL}_t(\pi_{\mathrm{ref}} \Vert \pi_\theta)$ | a **forward** KL at every position, prefixes frozen |
+| $k_1$ as a per-token loss | $0$ | nothing, in expectation |
+
+The single-position part of this, that $k_3$ as a loss follows the forward KL's gradient, has been pointed out before (see
+[References](#references)). What this post adds:
+
+1. **The sequence-level picture in Table 1**, checked exactly on a small model. It also makes precise how $k_1$ in the
+   reward and $k_2$ as a loss differ: $k_2$ as a loss is exactly $k_1$ in the reward with each token charged only for its
+   own KL, and the returns are what turn a per-position penalty into the sequence-level one.
+2. **A reading of GRPO's penalty**: a forward KL on the policy's own prefixes is what
+   [Zhao et al. (2026)](https://arxiv.org/abs/2605.16826) call DAgger-style on-policy SFT, here with the reference model as
+   the expert.
+3. **What it does in training**, on a toy problem with a known optimum: $k_3$ as a loss settles somewhere else, keeping
+   extra entropy at the cost of reward when the reward dominates, and the reverse when the penalty dominates. One picture of
+   its gradient explains both.
 
 All code is at [github.com/khanhptnk/kl-penalty-in-grpo](https://github.com/khanhptnk/kl-penalty-in-grpo) and runs on a
 CPU in a few minutes.
 
 ## Setup: three estimators of the same KL
 
-At a single position, sample a token $a \sim \pi_\theta$ and let $r = \pi_{\mathrm{ref}}(a) / \pi_\theta(a)$. Since we
-sample from $\pi_\theta$, $\mathbb{E}_{a \sim \pi_\theta}[r] = \sum_a \pi_{\mathrm{ref}}(a) = 1$. Schulman's
+Start with a single position. Sample a token $a \sim \pi_\theta$ and let $r = \pi_{\mathrm{ref}}(a) / \pi_\theta(a)$. Since
+we sample from $\pi_\theta$, $\mathbb{E}_{a \sim \pi_\theta}[r] = \sum_a \pi_{\mathrm{ref}}(a) = 1$. Schulman's
 [note](http://joschu.net/blog/kl-approx.html) gives three per-sample estimators of
 $\mathrm{KL}(\pi_\theta \,\|\, \pi_{\mathrm{ref}}) = \mathbb{E}_{a \sim \pi_\theta}[-\log r]$:
 
-| Estimator | Formula | Unbiased for the KL value? | Always $\ge 0$? |
+*Table 2. Three per-sample estimators of $\mathrm{KL}(\pi_\theta \,\|\, \pi_{\mathrm{ref}})$ from a token $a \sim \pi_\theta$, with $r = \pi_{\mathrm{ref}}(a)/\pi_\theta(a)$.*
+
+| Estimator | Formula | Unbiased for the KL's value? | Always $\ge 0$? |
 |---|---|---|---|
 | $k_1$ | $-\log r$ | yes | no |
 | $k_2$ | $\tfrac{1}{2}(\log r)^2$ | no (low bias near $r = 1$) | yes |
@@ -43,36 +60,32 @@ $\mathrm{KL}(\pi_\theta \,\|\, \pi_{\mathrm{ref}}) = \mathbb{E}_{a \sim \pi_\the
 $k_3$ looks like the best of both worlds: unbiased, non-negative, low variance. GRPO
 ([DeepSeekMath](https://arxiv.org/abs/2402.03300)) adds $\beta\, k_3$ to the per-token loss.
 
-But these are estimators of the KL's **value**. Training needs its **gradient**, and there are two ways to turn an estimator
-into one.
+But these estimate the KL's **value**. Training needs its **gradient**, and there are two ways to turn an estimator into one:
 
-## Two ways to use an estimator
-
-- **In the reward.** Treat $k$ as a detached penalty on the reward and let the policy gradient carry it:
-  the gradient is $\mathbb{E}\big[\,k \cdot \nabla_\theta \log \pi_\theta(a)\,\big]$ with $k$ held constant. This is what
-  InstructGPT-style PPO does, where each token's reward gets $-\beta\,k_1$.
-- **As a loss.** Add $k$ to the loss and backpropagate through it: the gradient is
-  $\mathbb{E}\big[\,\nabla_\theta k\,\big]$, with the expectation still over $a \sim \pi_\theta$ but the sampling not
-  differentiated. This is what GRPO does with $k_3$.
+- **In the reward.** Treat $k$ as a detached penalty on the reward and let the policy gradient carry it. The gradient is
+  $\mathbb{E}\big[\,k \cdot \nabla_\theta \log \pi_\theta(a)\,\big]$ with $k$ held constant. InstructGPT-style PPO does this:
+  each token's reward gets $-\beta\,k_1$, and the advantage estimator (returns or GAE) passes it on to earlier tokens.
+- **As a loss.** Add $k$ to the loss and backpropagate through it. The gradient is $\mathbb{E}\big[\,\nabla_\theta k\,\big]$:
+  the expectation is still over $a \sim \pi_\theta$, but the sampling isn't differentiated. GRPO does this with $k_3$.
 
 The KL's true gradient has two parts, because $\pi_\theta$ appears both in the sampling distribution and inside the
-log-ratio. "As a loss" only differentiates the second part. Whether the result is still the right gradient depends on
-the estimator.
+log-ratio. "As a loss" only differentiates the second part. Whether that's still the right gradient depends on the estimator.
 
-## The per-position gradients
+## One position
 
 Write $\log r = \log \pi_{\mathrm{ref}}(a) - \log \pi_\theta(a)$, so $\nabla_\theta \log r = -\nabla_\theta \log \pi_\theta(a)$.
 
 **$k_1$ in the reward.** $\mathbb{E}_{\pi_\theta}\big[(\log \pi_\theta - \log \pi_{\mathrm{ref}})\,\nabla \log \pi_\theta\big]$.
-This is exactly $\nabla_\theta\, \mathrm{KL}(\pi_\theta \,\|\, \pi_{\mathrm{ref}})$: the score-function form of the reverse-KL
+This is exactly $\nabla_\theta\, \mathrm{KL}(\pi_\theta \,\|\, \pi_{\mathrm{ref}})$, the score-function form of the reverse-KL
 gradient. (The other term, $\mathbb{E}[\nabla \log \pi_\theta] = 0$, vanishes.)
 
 **$k_1$ as a loss.** $\mathbb{E}_{\pi_\theta}[\nabla(\log \pi_\theta - \log \pi_{\mathrm{ref}})] = \mathbb{E}_{\pi_\theta}[\nabla \log \pi_\theta] = 0$.
 It does nothing in expectation.
 
-**$k_2$ as a loss.** $\nabla \tfrac{1}{2}(\log r)^2 = \log r \cdot \nabla \log r = (\log \pi_\theta - \log \pi_{\mathrm{ref}})\,\nabla \log \pi_\theta$,
-the same integrand as $k_1$ in the reward. So $k_2$ as a loss gives the **reverse**-KL gradient, an equivalence
-[Liu et al. (2025)](https://arxiv.org/abs/2510.01555) prove in general for on-policy samples.
+**$k_2$ as a loss.** $\nabla \tfrac{1}{2}(\log r)^2 = \log r \cdot \nabla \log r = (\log \pi_\theta - \log \pi_{\mathrm{ref}})\,\nabla \log \pi_\theta$.
+That isn't just the same in expectation as $k_1$ in the reward: it is the same **sample by sample**. At a single position,
+$k_2$ as a loss and $k_1$ in the reward are the same estimator, both of the reverse-KL gradient
+([Liu et al., 2025](https://arxiv.org/abs/2510.01555) prove the equivalence in general for on-policy samples).
 
 **$k_3$ as a loss.** With $\log r = x$, $k_3 = e^x - 1 - x$, so $\frac{d k_3}{dx} = e^x - 1 = r - 1$, and
 
@@ -104,7 +117,7 @@ because in the forward KL the weights are $\pi_{\mathrm{ref}}$, which don't depe
 > $\mathrm{KL}(\pi_{\mathrm{ref}} \,\|\, \pi_\theta)$, even though $k_3$ is an unbiased estimate of the reverse KL's value.
 
 On a small categorical distribution every expectation can be computed exactly, by summing over the vocabulary instead of
-sampling, so this can be checked as an identity rather than a statistical test:
+sampling, so this checks as an identity rather than a statistical test:
 
 ```python
 import torch
@@ -137,8 +150,8 @@ print(torch.allclose(k3_as_loss, forward), torch.allclose(k3_as_loss, reverse)) 
 
 ### The shape of the pull
 
-It helps to look at the per-token coefficient $c$ in $\nabla \mathrm{loss} = c\, \nabla \log \pi_\theta(a)$. The reverse-KL
-implementations have $c = \log \pi_\theta(a) - \log \pi_{\mathrm{ref}}(a)$; $k_3$ has $c = 1 - r$. With
+Both "as a loss" gradients have the form $c \cdot \nabla \log \pi_\theta(a)$ for the sampled token, so they differ only in
+the coefficient $c$: $\log \pi_\theta(a) - \log \pi_{\mathrm{ref}}(a)$ for the reverse KL, and $1 - r$ for $k_3$. With
 $x = \log r$, $1 - e^x = -x - x^2/2 - \dots$, so the two agree to first order near the reference, which is why
 [Liu et al.](https://arxiv.org/abs/2510.01555) call $k_3$ as a loss "a first-order, biased approximation". Away from the
 reference they are very different:
@@ -146,125 +159,108 @@ reference they are very different:
 <figure>
 <img class="theme-light" src="../assets/kl-penalty-in-grpo/kl-coefficient-light.svg" alt="The per-token gradient coefficient as a function of pi over pi_ref, for the reverse-KL implementations (a straight line in log pi over pi_ref) and for k3 as a loss (capped at 1 above, falling exponentially below).">
 <img class="theme-dark" src="../assets/kl-penalty-in-grpo/kl-coefficient-dark.svg" alt="The per-token gradient coefficient as a function of pi over pi_ref, for the reverse-KL implementations (a straight line in log pi over pi_ref) and for k3 as a loss (capped at 1 above, falling exponentially below).">
-<figcaption>Figure 1. The per-token gradient coefficient at the sampled token. A positive coefficient lowers the token's probability, a negative one raises it.</figcaption>
+<figcaption>Figure 1. The gradient coefficient c at the sampled token, as a function of how much more (right) or less (left) the policy likes that token than the reference does. A positive c lowers the token's probability, a negative c raises it.</figcaption>
 </figure>
 
-$k_3$'s pull is **asymmetric**. For a token the policy under-weights ($\pi_\theta \ll \pi_{\mathrm{ref}}$), it pushes
-up exponentially hard. For a token the policy over-weights, it pushes down gently, never with a coefficient above 1. That
-is the forward KL's mass-covering behavior, seen token by token, and it predicts both halves of the experiment below.
+$k_3$'s pull is **asymmetric**. On a token the policy under-weights ($\pi_\theta \ll \pi_{\mathrm{ref}}$), it pushes up
+exponentially hard. On a token the policy over-weights, it pushes down gently, never with a coefficient above 1. That is
+the forward KL's mass-covering behavior seen token by token, and it predicts both halves of the experiment below.
 
-## Over sequences: a forward KL on the policy's own prefixes
+## Whole sequences
 
-So far this is one position. A response is a sequence $y = (y_1, \dots, y_T)$, and the KL of sequences decomposes by the
-chain rule, with the prefixes drawn from the **first** argument:
+A response is a sequence $y = (y_1, \dots, y_T)$, and the KL between sequence distributions decomposes by the chain rule,
+with the prefixes drawn from the **first** argument:
 
 $$
 \mathrm{KL}(P \,\|\, Q) = \sum_{t} \mathbb{E}_{y_{<t} \sim P}\Big[\mathrm{KL}\big(P(\cdot \mid y_{<t}) \,\|\, Q(\cdot \mid y_{<t})\big)\Big].
 $$
 
-- For the **reverse** KL, the prefixes come from $\pi_\theta$, the policy we sample from anyway. So summing per-token
-  terms over our own rollouts gives the right **value**. The **gradient** is another matter: the prefix distribution
-  itself depends on $\theta$. A per-token loss treats each prefix as fixed and misses that part. Putting $k_1$ in the
-  reward and computing returns captures it, because each token's return includes the KL of everything after it.
-  [Tang and Munos (2025)](https://arxiv.org/abs/2506.09477) call the per-token version "a partial gradient at best".
-- For the **forward** KL, $\mathrm{KL}(P_{\mathrm{ref}} \,\|\, P_\theta)$, the chain rule wants prefixes from
-  $\pi_{\mathrm{ref}}$. Its gradient is $-\mathbb{E}_{y \sim P_{\mathrm{ref}}}[\nabla \log P_\theta(y)]$: maximum likelihood on
-  samples the reference generated.
+For the reverse KL the prefixes come from $P_\theta$, the policy we sample from anyway, so summing per-token terms over our
+own rollouts gives the right **value**. The **gradient** has one more part, because the prefix distribution itself depends on
+$\theta$: changing the probability of an early token changes which later prefixes the policy visits, and so how much KL it
+accumulates there.
 
-$k_3$ as a loss matches neither. At each position it follows the forward KL of the next-token distributions, but it's
-evaluated on prefixes the **policy** generated:
+- **$k_1$ in the reward, with returns, captures that part.** Each token's return includes the KL of every token after it,
+  so an early token is credited (or blamed) for the KL it leads to. Its expected gradient is exactly the sequence-level
+  reverse-KL gradient.
+- **A per-token loss can't.** It treats each prefix as given and only adjusts the next-token distribution at that prefix.
+  So $k_2$ as a loss follows a *per-position* reverse KL with the prefixes frozen, the second row of Table 1. That is
+  exactly $k_1$ in the reward with each token charged only for its own KL: dropping the returns is the whole difference.
+  [Tang and Munos (2025)](https://arxiv.org/abs/2506.09477) call this "a partial gradient at best".
+- **$k_3$ as a loss** is the same per-position, prefixes-frozen construction, with the forward KL at each position instead
+  of the reverse one, the third row of Table 1.
 
-$$
-\sum_t \mathbb{E}_{y_{<t} \sim \pi_\theta}\Big[\mathrm{KL}\big(\pi_{\mathrm{ref}}(\cdot \mid y_{<t}) \,\|\, \pi_\theta(\cdot \mid y_{<t})\big)\Big].
-$$
-
-[Zhao et al. (2026)](https://arxiv.org/abs/2605.16826) classify distillation objectives by two independent choices: the
-KL direction, and whose prefixes the supervision is applied on. Forward KL on the student's own prefixes is, in their words,
-"DAgger-style on-policy SFT": the student visits states, and the teacher supplies next-token targets there. So GRPO's KL
-penalty, implemented as $k_3$ as a loss, is DAgger-style on-policy SFT toward the reference model. (What is usually called
-on-policy distillation uses the reverse KL on the student's prefixes, the other cell of the same table;
-[GKD](https://arxiv.org/abs/2306.13649) covers both.) As a regularizer that is arguably reasonable: it anchors the
-policy in the states it actually visits. But it is not the regularizer the objective writes down.
+In practice there's a second difference between the first two: $k_1$ in the reward travels through the advantage pipeline
+(baselines, GAE, advantage normalization, PPO clipping), so its effective strength depends on those. A KL loss term is
+added separately, so $\beta$ keeps its meaning.
 
 **Checking it exactly.** A tabular autoregressive policy with 3 tokens and length 3 has 27 sequences, so every expectation
-above is a finite sum. With the policy's logits set to the reference's plus $\alpha$ times a random direction:
+above is a finite sum. For policies at five distances from the reference, every row of Table 1 holds as an exact identity,
+and so does "$k_2$ as a loss equals $k_1$ in the reward without returns". The per-position versions aren't small
+corrections: one unit of logit noise away from the reference, $k_3$ as a loss is 26% off the sequence-level forward-KL
+gradient and $k_2$ as a loss is 31% off the sequence-level reverse-KL gradient.
 
-- per-token $k_3$ as a loss has *exactly* the gradient of the sum above, at every distance we tried;
-- $k_1$ in the reward, with reward-to-go returns, has exactly the gradient of the sequence-level reverse KL;
-- per-token $k_2$ as a loss misses exactly the part that flows through future tokens: adding it back recovers the
-  sequence-level reverse-KL gradient.
-
-How far each per-token loss is from the sequence-level gradient it approximates (relative norm of the difference):
-
-| distance from the reference, $\alpha$ | 0.01 | 0.1 | 0.3 | 1 | 2 |
-|---|---|---|---|---|---|
-| $k_3$ as a loss vs. sequence forward KL | 0.2% | 2.1% | 6.6% | 26% | 46% |
-| $k_2$ as a loss vs. sequence reverse KL | 0.1% | 1.3% | 4.3% | 31% | 182% |
-
-Both agree near the reference and drift apart as the policy moves, which is exactly when the regularizer should matter.
+**Reading GRPO's penalty.** [Zhao et al. (2026)](https://arxiv.org/abs/2605.16826) classify distillation objectives by two
+independent choices: the KL direction, and whose prefixes the supervision is applied on. Forward KL on the student's own
+prefixes is, in their words, "DAgger-style on-policy SFT": the student visits states, and the teacher supplies next-token
+targets there. So GRPO's KL penalty, implemented as $k_3$ as a loss, is DAgger-style on-policy SFT toward the reference
+model. (What is usually called on-policy distillation uses the reverse KL on the student's prefixes, the other cell of the
+same table; [GKD](https://arxiv.org/abs/2306.13649) covers both.) As a regularizer that's arguably reasonable, since it
+anchors the policy in the states it actually visits. But it is not the regularizer the objective writes down.
 
 ## What it does in training
 
-The derivations say what each implementation's gradient *is*. The experiments below ask what it *does*, on toy problems
-where the policy, the reference and every expectation are known exactly. They show direction and mechanism, not magnitudes
-for LLM training (see [Limitations](#limitations)).
+The derivations say what each implementation's gradient *is*. Two toy experiments show what it *does*. Both are small
+enough that every quantity is computed exactly, so they show direction and mechanism, not magnitudes for LLM training
+(see [Limitations](#limitations)).
 
-**A different fixed point.** Same 27-sequence policy, a reward of 1 for one sequence and 0 otherwise, REINFORCE with a
-batch-mean baseline and 64 sampled sequences per step, training from the reference, 10 seeds. The KL term is added in each
-of the three ways. The objective $\mathbb{E}[R] - \beta\,\mathrm{KL}(P_\theta \,\|\, P_{\mathrm{ref}})$ has a closed-form
-optimum, $P^* \propto P_{\mathrm{ref}}\, e^{R/\beta}$, so we know where a correct implementation should land.
+**Where training settles.** The same 27-sequence policy, a reward of 1 for one sequence and 0 for the rest, trained from
+the reference with REINFORCE (a batch-mean baseline, 64 sampled sequences per step, 10 seeds) and the KL penalty added in
+each of the three ways. The objective $\mathbb{E}[R] - \beta\,\mathrm{KL}(P_\theta \,\|\, P_{\mathrm{ref}})$ has a closed-form
+optimum, $P^* \propto P_{\mathrm{ref}}\, e^{R/\beta}$, so we know where a correct implementation should end up.
 
 <figure>
-<img class="theme-light" src="../assets/kl-penalty-in-grpo/kl-entropy-light.svg" alt="Left: entropy during training at beta 0.2; k1 in the reward settles near the reverse-KL optimum of 0.68, k2 as a loss below it, k3 as a loss far above it at 1.38. Right: final entropy against beta; k3 is far above the optimum for beta up to 0.2, slightly below it at 0.5, and equal at 1.">
-<img class="theme-dark" src="../assets/kl-penalty-in-grpo/kl-entropy-dark.svg" alt="Left: entropy during training at beta 0.2; k1 in the reward settles near the reverse-KL optimum of 0.68, k2 as a loss below it, k3 as a loss far above it at 1.38. Right: final entropy against beta; k3 is far above the optimum for beta up to 0.2, slightly below it at 0.5, and equal at 1.">
-<figcaption>Figure 2. Entropy of the sequence distribution (nats). Bands and error bars show the spread over 10 seeds. The reference policy's entropy is 2.81.</figcaption>
+<img class="theme-light" src="../assets/kl-penalty-in-grpo/kl-entropy-light.svg" alt="Two panels against the KL coefficient beta. Left, entropy: k1 in the reward follows the optimum; k3 as a loss is far above it for beta up to 0.2 and slightly below it at 0.5. Right, probability of the rewarded sequence: k1 follows the optimum; k3 is below it for small beta and above it at 0.5.">
+<img class="theme-dark" src="../assets/kl-penalty-in-grpo/kl-entropy-dark.svg" alt="Two panels against the KL coefficient beta. Left, entropy: k1 in the reward follows the optimum; k3 as a loss is far above it for beta up to 0.2 and slightly below it at 0.5. Right, probability of the rewarded sequence: k1 follows the optimum; k3 is below it for small beta and above it at 0.5.">
+<figcaption>Figure 2. Where training settles after 1,500 steps, for each implementation of the penalty and each β (mean and spread over 10 seeds). The dotted line is the exact optimum of the KL-regularized objective.</figcaption>
 </figure>
 
-| $\beta$ | 0.05 | 0.1 | 0.2 | 0.5 | 1 |
-|---|---|---|---|---|---|
-| reverse-KL optimum | 0.00 | 0.01 | 0.68 | 2.58 | 2.78 |
-| $k_1$ in the reward | 0.04 | 0.07 | 0.74 | 2.59 | 2.78 |
-| $k_2$ as a loss | 0.04 | 0.06 | 0.51 | 2.48 | 2.78 |
-| $k_3$ as a loss | **0.46** | **0.82** | **1.38** | **2.41** | 2.80 |
-
-- $k_1$ in the reward lands within 0.06 nats of the optimum at every $\beta$, as the derivation says it should (the small
-  excess is finite training).
-- $k_2$ as a loss tracks $k_1$ at small $\beta$ but falls below the optimum at $\beta = 0.2$ and $0.5$: missing the
-  future-token part of the gradient makes it a weaker regularizer.
-- $k_3$ as a loss lands somewhere else entirely. When the reward dominates ($\beta \le 0.2$), it keeps far more entropy,
-  twice the optimum at $\beta = 0.2$, at the cost of reward. When the penalty dominates ($\beta = 0.5$), it keeps slightly
-  *less* (2.41 ± 0.02 against 2.58). Figure 1 explains both: far from the reference, the exponential pull on under-weighted
-  sequences keeps them alive; near the reference, the capped push on the over-weighted, rewarded sequence lets it grow more
-  than the reverse KL would allow.
+- **$k_1$ in the reward lands on the optimum** at every $\beta$ (within 0.06 nats of entropy and 0.01 of reward
+  probability, the slack of finite training), as Table 1 says it should.
+- **$k_2$ as a loss under-regularizes**: it ends up with more reward than the optimum (0.92 against 0.88 at
+  $\beta = 0.2$), because the per-position penalty misses the KL that early tokens cause later on.
+- **$k_3$ as a loss misses in both directions.** When the reward dominates ($\beta \le 0.2$), it keeps far more entropy
+  and gives up reward (0.73 against 0.88 at $\beta = 0.2$). When the penalty dominates ($\beta = 0.5$), it does the opposite:
+  more reward (0.40 against 0.27), less entropy. Figure 1 explains both. Far from the reference, the exponential push on
+  under-weighted sequences keeps them alive. Near it, the capped push against the over-weighted, rewarded sequence lets
+  that sequence grow more than the reverse KL would allow.
 
 So "$k_3$ as a loss keeps more entropy" is only true in one regime. The accurate statement is that it is a different
 regularizer, with an asymmetric pull.
 
-**Recovering a dropped mode, and how noisy that is.** Back to one position: 10 tokens, the reference gives token $J$
-probability 0.2, the policy has nearly dropped it ($\pi_\theta(J) \approx 1.5 \times 10^{-4}$), and we train with the
-KL term alone. In expectation, $k_3$ as a loss pulls $J$ back about **175 times** harder than $k_2$ (which follows the reverse
-KL). But that pull comes almost entirely (over 99.9%) from the rare event that $J$ is sampled, so per step it is noise:
-with 64 tokens per batch, the standard deviation of the gradient on $J$ is 10 times its mean; with 1024 tokens, 2.5 times.
+**How the pull arrives.** Figure 1's exponential side has a catch: it only acts on a token when that token is sampled.
+Take a policy that has nearly dropped a token the reference likes (probability $1.5 \times 10^{-4}$ against 0.2) and train
+with the KL term alone:
 
 <figure>
 <img class="theme-light" src="../assets/kl-penalty-in-grpo/kl-recovery-light.svg" alt="Probability of the dropped token over 300 steps, log scale. The exact forward-KL gradient recovers it smoothly to 0.2 by step 100. Sampled k3 runs stay flat, then jump to nearly 1 in a single step when the token is first sampled, and decay back to 0.2. Sampled k2 runs stay near 0.0002.">
 <img class="theme-dark" src="../assets/kl-penalty-in-grpo/kl-recovery-dark.svg" alt="Probability of the dropped token over 300 steps, log scale. The exact forward-KL gradient recovers it smoothly to 0.2 by step 100. Sampled k3 runs stay flat, then jump to nearly 1 in a single step when the token is first sampled, and decay back to 0.2. Sampled k2 runs stay near 0.0002.">
-<figcaption>Figure 3. Probability of the dropped token, 5 of 20 seeds per method. Sampled k3 runs recover through one violent update at a random time, not a steady pull (19 of 20 seeds within 300 steps).</figcaption>
+<figcaption>Figure 3. Probability of a token the policy had nearly dropped, under the KL term alone (5 of 20 seeds per method, 64 sampled tokens per step).</figcaption>
 </figure>
 
-With $k_3$, 19 of 20 seeds recover the mode within 300 steps; none with $k_2$ do. But each recovery is a single enormous
-update at a random time. Nothing happens until $J$ is sampled, which here takes about 100 steps on average: the first
-jumps range from step 4 to step 287, and one seed never samples $J$ at all. Then the weight $1 - r \approx -1300$ throws
-the probability to nearly 1 before it settles back. The exact forward-KL gradient makes the same journey smoothly,
-passing 1% at step 39. So the pull is mass-covering, but it arrives as rare, violent updates, the same heavy tail
-behind the statistical instability of $k_3$ that [Liu et al.](https://arxiv.org/abs/2510.01555) analyze in their Appendix I.
+With $k_2$, the token never comes back: the reverse KL barely cares about mass the policy doesn't put somewhere. With
+$k_3$, it comes back in 19 of 20 runs, but not the way the exact forward-KL gradient does it. Nothing happens until the
+token is sampled (here about once per 100 steps), and then a single update with weight $1 - r \approx -1300$ throws its
+probability to nearly 1 before it settles. The mass-covering pull is real, but it arrives as rare, violent updates, the same
+heavy tail behind the statistical instability of $k_3$ that [Liu et al.](https://arxiv.org/abs/2510.01555) analyze in their
+Appendix I.
 
 ## What to take away
 
-- **If you want the reverse KL the objective writes down,** use $k_1$ in the reward with returns (the full sequence-level
-  gradient), or $k_2$ as a loss (the per-position part only).
-- **If you keep $k_3$ as a loss,** know that you are doing DAgger-style on-policy SFT toward the reference: an asymmetric
-  pull that fights dropped modes hard and over-weighted ones gently, with the hard part arriving as rare large updates.
+- **If you want the reverse KL the objective writes down,** use $k_1$ in the reward with returns. $k_2$ as a loss gives
+  the per-position part only.
+- **If you keep $k_3$ as a loss,** you are doing DAgger-style on-policy SFT toward the reference: an asymmetric pull that
+  fights dropped modes hard and over-weighted ones gently, with the hard part arriving as rare large updates.
 - **Many recent reasoning-RL recipes set $\beta = 0$** (e.g. [DAPO](https://arxiv.org/abs/2503.14476)) and sidestep the
   question entirely.
 
@@ -273,9 +269,9 @@ its gradient. Before backpropagating through an estimator, check what its expect
 
 ## Limitations
 
-The toy problems were chosen so that every quantity can be computed exactly, which is what makes the identities
-airtight. They establish what each implementation optimizes, and they show the mechanisms. They do not measure how much
-the difference matters in LLM training, where $\beta$ is small relative to the advantages, the vocabulary is large, the
+The toy problems were chosen so that every quantity can be computed exactly, which is what makes the identities airtight.
+They establish what each implementation optimizes, and they show the mechanisms. They don't measure how much the
+difference matters in LLM training, where $\beta$ is small relative to the advantages, the vocabulary is large, the
 policy-gradient term dominates, and gradient clipping blunts exactly the large updates in Figure 3. An RL run on a real
 model comparing $k_3$ as a loss with $k_2$ as a loss at equal $\beta$ would settle that.
 
