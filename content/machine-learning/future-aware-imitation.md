@@ -80,8 +80,8 @@ and runs on a CPU in about an hour, tuning included.
 
 **States, observations, rewards.** At step $t$ the environment is in a state $s_t$, which includes everything the expert's
 choices depend on. The learner's policy $\pi(a \mid o_t)$ sees only an observation $o_t$, which can leave things out.
-The expert plays $a^E_t$, and the learner earns $r_t = +1$ when its action matches it and $r_t = -1$ otherwise. Every
-episode has 9 steps, and the shared objective is the expected agreement,
+Every action is binary, 0 or 1. The expert plays $a^E_t$, and the learner earns $r_t = +1$ when its action matches it
+and $r_t = -1$ otherwise. Every episode has 9 steps, and the shared objective is the expected agreement,
 
 $$
 J(\pi) = \mathbb{E}_{\tau \sim \pi}\Big[\sum_{t=0}^{8} r_t\Big],
@@ -116,12 +116,12 @@ What differs is **what** they pool:
 |---|---|---|
 | DAgger | none: it fits the expert's action as a label | the expert's action |
 | AggreVaTe | $Q^E$, the return when the expert plays the rest | the expert's best action, $\arg\max_a A^E$ |
-| LOLS | $Q^\pi$, the return when the learner plays the rest, both actions tried | the learner's best policy |
+| LOLS | $Q^\pi$, the return when the learner plays the rest, every action tried | the learner's best policy |
 | APPO | $Q^\pi$, the episode's own return from that step on | the learner's best policy |
 
 AggreVaTe ([Ross & Bagnell, 2014](https://arxiv.org/abs/1406.5979)) picks a random step of a learner roll-out, takes a
-random action there, and lets the expert finish. LOLS ([Chang et al., 2015](https://arxiv.org/abs/1502.02206)) tries both
-actions at the random step and lets the learner finish each (or, with probability $\beta$, the expert). APPO tries
+random action there, and lets the expert finish. LOLS ([Chang et al., 2015](https://arxiv.org/abs/1502.02206)) tries every
+action at the random step (here, both) and lets the learner finish each (or, with probability $\beta$, the expert). APPO tries
 nothing on purpose: it credits every action the learner takes with that episode's return from that step on, minus the
 average at the same observation, and takes PPO's clipped gradient steps. (A GRPO-style version, with group-normalized trajectory returns as
 the advantage, behaves like APPO in every setting; its results are in the code repository.) With
@@ -430,9 +430,9 @@ APPO's advantage is specific to choosing among unavoidable mistakes. The experim
 - **It targets the expert's most likely action.** Against a stochastic teacher it collapses to that action and abandons
   the teacher's distribution. If matching the distribution is the goal, the sequence-level reverse KL with returns makes
   the same kind of choice at the root while staying a distribution.
-- **LOLS does as well in these toys,** with nothing to tune but $\beta$, because it compares both actions from the same
+- **LOLS does as well in these toys,** with nothing to tune but $\beta$, because it compares every action from the same
   state and fits a deterministic classifier. Its price is the ability to restart from intermediate states and play one
-  extra episode per action, which APPO doesn't need.
+  extra episode per action (two here; a whole vocabulary for a language model), which APPO doesn't need.
 
 - **An entropy bonus changes neither the choice nor the collapse.** APPO here has no entropy bonus. Adding one (Table 6)
   changes no decision up to $c = 0.1$, and errors rise by at most 0.02. From $c = 0.3$ on, the policy stays random where it should be
@@ -523,7 +523,8 @@ the last two rows evaluate the same degree-7 students against the stochastic tea
 - **DAgger:** 120 iterations × 3,072 learner roll-outs. Expert labels at every visited state are aggregated over all
   iterations and the policy is their label frequencies (pseudocount $10^{-3}$).
 - **AggreVaTe:** 60 iterations × 3,072 roll-ins, each with one expert roll-out after a random action at a random step.
-  **LOLS:** 40 iterations × 3,072 roll-ins, each with two roll-outs, one per action, at a random step; tuning chose
+  **LOLS:** 40 iterations × 3,072 roll-ins, each with one roll-out per action (two, since the actions are binary) at a
+  random step; tuning chose
   $\beta = 0$ in every setting. Both aggregate the values over iterations and play the action with the higher mean value
   at each state. For the polynomial student, the cost-sensitive problem is solved as a weighted logistic regression
   (label: the better action; weight: samples × the value gap) and played deterministically.
