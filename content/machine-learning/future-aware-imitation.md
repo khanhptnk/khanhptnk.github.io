@@ -194,14 +194,14 @@ own future, $Q^\pi$, charges those later terms to the root action that causes th
 
 *Table 2. Privileged information: mean ± standard deviation over 12 seeds, 50,000 evaluation episodes each. "Reveals" is
 the probability of the revealing action at the root; "greedy" plays each policy's more likely action. The learner's best
-policy makes 0.5 errors per episode with 100% success.*
+policy makes 0.5 errors per episode with 100% success. ↑ higher is better, ↓ lower is better; the best value in each column is in bold.*
 
-| Method | Reveals | Errors | Success (%) | Errors, greedy |
+| Method | Reveals ↑ | Errors ↓ | Success (%) ↑ | Errors, greedy ↓ |
 |---|---|---|---|---|
 | DAgger | 0.500 ± 0.001 | 2.50 ± 0.01 | 54.5 ± 0.2 | 1.84 ± 1.97 |
 | AggreVaTe | 0.50 ± 0.52 | 2.50 ± 2.09 | 75.0 ± 26.1 | 2.50 ± 2.09 |
-| LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
-| APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
+| LOLS | **1.000 ± 0.000** | **0.50 ± 0.00** | **100.0 ± 0.0** | **0.50 ± 0.00** |
+| APPO | **1.000 ± 0.000** | **0.50 ± 0.00** | **100.0 ± 0.0** | **0.50 ± 0.00** |
 
 DAgger lands exactly where the analysis puts it. Half its episodes take the revealing branch and succeed; the other half
 are 9 coin flips, which succeed with probability $P(\mathrm{Bin}(9, \tfrac{1}{2}) \le 2) = 46/512$, so its success rate is
@@ -264,14 +264,14 @@ $\tfrac{1}{2} + \tfrac{1}{4} + \tfrac{1}{4} \cdot P(\mathrm{Bin}(8, \tfrac{1}{2}
 **Results.**
 
 *Table 3. Partly random expert, 12 seeds. "Recoverable side" is the probability of root action 1, whose mistake is the
-recoverable one. The learner's best policy makes 0.5 errors per episode with 100% success.*
+recoverable one. The learner's best policy makes 0.5 errors per episode with 100% success. ↑ higher is better, ↓ lower is better; the best value in each column is in bold.*
 
-| Method | Recoverable side | Errors | Success (%) | Errors, greedy |
+| Method | Recoverable side ↑ | Errors ↓ | Success (%) ↑ | Errors, greedy ↓ |
 |---|---|---|---|---|
 | DAgger | 0.500 ± 0.001 | 1.50 ± 0.01 | 75.9 ± 0.2 | 1.17 ± 0.98 |
 | AggreVaTe | 0.67 ± 0.49 | 1.16 ± 0.98 | 84.0 ± 23.7 | 1.16 ± 0.98 |
-| LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
-| APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
+| LOLS | **1.000 ± 0.000** | **0.50 ± 0.00** | **100.0 ± 0.0** | **0.50 ± 0.00** |
+| APPO | **1.000 ± 0.000** | **0.50 ± 0.00** | **100.0 ± 0.0** | **0.50 ± 0.00** |
 
 AggreVaTe picks the recoverable side in 8 of 12 seeds, which is again chance: its estimated values tie.
 
@@ -305,32 +305,30 @@ $\lceil (7 - k)/2 \rceil$ errors. Leaving the teacher's path costs exactly one e
   student's best policy is the teacher.)
 
 **What each method sees at the root.** Here nothing is hidden, so there is only one root state and nothing to average.
-DAgger's label there is the teacher's action, always 0: copy. The values of the two root actions:
+DAgger's label there is the teacher's action, always 0: copy. The values of the two root actions (copying is worth at
+most $1 + (5 - 3) = 3$ to the student: $+1$ at the root, then at least 3 errors among the 8 steps of the teacher's path):
 
-| At the root (degree-1 student) | copy the teacher (action 0) | leave (action 1) | Prefers |
+| At the root, degree 1 | Copy (action 0) | Leave (action 1) | Prefers |
 |---|---|---|---|
 | AggreVaTe: $Q^E$ | $1 + 8 = 9$ | $-1 + 8 = 7$ | copy |
-| LOLS, APPO: $Q^\pi$ | at most $1 + (5 - 3) = 3$ | $-1 + 8 = 7$ | leave |
+| LOLS, APPO: $Q^\pi$ | at most 3 | $-1 + 8 = 7$ | leave |
 
 The teacher's best action, which is what DAgger and AggreVaTe aim at, is copying: the teacher can play its own path
 perfectly. The student can't. Only $Q^\pi$ counts the at-least-3 errors the student would make on the teacher's path.
 
 **Results.**
 
-*Table 4. Limited capacity with a deterministic teacher (12 seeds; standard deviations across seeds are at most 0.01,
-or 0.2 points of success). "Leave" is the probability of leaving the teacher's path at the root. A degree-7 student can
-represent the teacher.*
+*Table 4. Limited capacity with a deterministic teacher (12 seeds; standard deviations across seeds are at most 0.01).
+"Leave" is the probability of leaving the teacher's path at the root; it has no better direction, since leaving is right
+for a degree-1 student and wrong for a degree-7 one, which can represent the teacher. The fewest errors possible are 1 at
+degree 1 and 0 at degree 7. ↓ lower is better; the best value in each column is in bold.*
 
-| Student | Method | Leave | Errors / episode | Task success | Errors, greedy |
-|---|---|---|---|---|---|
-| degree 1 | DAgger | 0.000 | 3.82 | 17.0% | 4.00 |
-| degree 1 | AggreVaTe | 0.000 | 4.00 | 0.0% | 4.00 |
-| degree 1 | LOLS | 1.000 | 1.00 | 100.0% | 1.00 |
-| degree 1 | APPO | 1.000 | 1.00 | 100.0% | 1.00 |
-| degree 7 | DAgger | 0.000 | 0.00 | 100.0% | 0.00 |
-| degree 7 | AggreVaTe | 0.000 | 0.00 | 100.0% | 0.00 |
-| degree 7 | LOLS | 0.000 | 0.00 | 100.0% | 0.00 |
-| degree 7 | APPO | 0.002 | 0.06 | 100.0% | 0.00 |
+| Method | Degree 1: leave | Degree 1: errors ↓ | Degree 7: leave | Degree 7: errors ↓ |
+|---|---|---|---|---|
+| DAgger | 0.000 | 3.82 | 0.000 | **0.00** |
+| AggreVaTe | 0.000 | 4.00 | 0.000 | **0.00** |
+| LOLS | 1.000 | **1.00** | 0.000 | **0.00** |
+| APPO | 1.000 | **1.00** | 0.002 | 0.06 |
 
 <figure>
 <img class="theme-light" src="../assets/future-aware-imitation/distill-light.svg" alt="Disagreements per episode against the student's polynomial degree from 0 to 7. DAgger falls from 4 errors at degree 0 to 2.5 at degree 6; AggreVaTe makes 4 errors up to degree 2 and 2 errors from degree 3 to 6; both reach 0 at degree 7. LOLS and APPO make 1 error at every degree below 7 and about 0 at degree 7.">
@@ -382,19 +380,20 @@ sequences, so every metric is computed exactly by summing over all of them.
 </figure>
 
 *Table 5. Stochastic teacher, student of degree 1 (12 seeds, exact evaluation). "Leave" is the probability of leaving
-the teacher's path at the root; errors are counted against the teacher's preferred action. Reverse KL is
-$\mathrm{KL}(P_S \Vert P_T)$ and forward KL is $\mathrm{KL}(P_T \Vert P_S)$, over whole episodes, in nats. Standard
-deviations across seeds are below 0.01 except where shown. † Stopped early by its tuning; see below.*
+the teacher's path at the root (no better direction: the objectives disagree on it). Errors are counted against the
+teacher's preferred action. Reverse KL is $\mathrm{KL}(P_S \Vert P_T)$ and forward KL is $\mathrm{KL}(P_T \Vert P_S)$, over
+whole episodes, in nats. Standard deviations across seeds are below 0.01 except where shown. ↓ lower is better; the best
+value in each column is in bold. † Stopped early by its tuning; see below.*
 
-| Objective | Leave | Errors | Success (%) | Rev. KL | Fwd. KL |
-|---|---|---|---|---|---|
-| Teacher | 0.10 | 0.90 | 94.7 | 0 | 0 |
-| Off-policy KD | 0.100 | 3.64 | 23.1 | 3.49 | 2.54 |
-| On-policy forward KL | 0.100 | 3.64 | 23.1 | 3.49 | 2.54 |
-| On-policy JSD | 0.100 | 3.61 | 23.5 | 3.48 | 2.55 |
-| Reverse KL, discount 0 † | 0.376 | 3.25 | 34.7 | 2.74 | 2.75 |
-| Reverse KL, returns | 0.840 | 2.12 | 71.1 | 2.13 | 3.90 |
-| APPO | 1.000 | 1.00 | 100.0 | 3.15 | 50 ± 15 |
+| Objective | Leave | Errors ↓ | Rev. KL ↓ | Fwd. KL ↓ |
+|---|---|---|---|---|
+| Teacher (reference) | 0.10 | 0.90 | 0 | 0 |
+| Off-policy KD | 0.100 | 3.64 | 3.49 | **2.54** |
+| On-policy fwd. KL | 0.100 | 3.64 | 3.49 | **2.54** |
+| On-policy JSD | 0.100 | 3.61 | 3.48 | 2.55 |
+| Rev. KL, discount 0 † | 0.376 | 3.25 | 2.74 | 2.75 |
+| Rev. KL, returns | 0.840 | 2.12 | **2.13** | 3.90 |
+| APPO | 1.000 | **1.00** | 3.15 | 50 ± 15 |
 
 - **Per-token objectives aim at the teacher, and follow it at every student size.** Off-policy KD, on-policy forward KL
   and on-policy JSD leave the teacher's path with the teacher's own probability, 0.1. This holds for any per-token
@@ -444,16 +443,17 @@ APPO's advantage is specific to choosing among unavoidable mistakes. The experim
 
 *Table 6. APPO with an entropy bonus of weight $c$, at APPO's tuned step size (12 seeds). APPO trains identically with
 the deterministic and the stochastic teacher (its reward is agreement with the teacher's preferred action either way), so
-the last two rows evaluate the same degree-7 students against the stochastic teacher's distribution.*
+the last two rows evaluate the same degree-7 students against the stochastic teacher's distribution. ↓ lower is better
+(no bold: the rows trade off against each other).*
 
 | | $c = 0$ | $c = 0.1$ | $c = 0.3$ | $c = 1$ |
 |---|---|---|---|---|
-| Case 1: errors | 0.50 | 0.50 | 1.27 | 2.00 |
-| Case 2: errors | 0.50 | 0.51 | 1.34 | 1.84 |
-| Case 3, degree 1: errors | 1.00 | 1.00 | 1.00 | 1.00 |
-| Case 3, degree 7: errors (either teacher) | 0.06 | 0.08 | 0.14 | 2.93 |
-| Stochastic teacher: reverse KL (nats) | 0.74 | 0.70 | 0.58 | 2.10 |
-| Stochastic teacher: forward KL (nats) | 5.26 | 4.69 | 3.45 | 1.58 |
+| Case 1: errors ↓ | 0.50 | 0.50 | 1.27 | 2.00 |
+| Case 2: errors ↓ | 0.50 | 0.51 | 1.34 | 1.84 |
+| Case 3, degree 1: errors ↓ | 1.00 | 1.00 | 1.00 | 1.00 |
+| Case 3, degree 7: errors ↓ (either teacher) | 0.06 | 0.08 | 0.14 | 2.93 |
+| Stochastic teacher: reverse KL ↓ (nats) | 0.74 | 0.70 | 0.58 | 2.10 |
+| Stochastic teacher: forward KL ↓ (nats) | 5.26 | 4.69 | 3.45 | 1.58 |
 
 ## Related work
 
