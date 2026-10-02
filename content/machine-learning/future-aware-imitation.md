@@ -21,17 +21,19 @@ for one of three reasons:
 
 ## Two targets
 
-When the learner can't imitate the expert, there are two different policies it could aim for:
+When the learner can't imitate the expert, a training method still has to aim at something, and there are two
+candidates:
 
-- **The optimal policy:** the best policy for an agent that sees everything the expert's choices depend on. In every
-  environment in this post, that is the expert itself.
-- **The learner's best policy:** the best policy *the learner can represent*, given what it observes and its size.
+- **The expert's policy.** This is what imitation aims at: make the learner act like the expert. The learner can't get
+  there, so it ends up with whatever it can represent that comes closest under the imitation loss.
+- **The learner's best policy:** the policy, among those the learner can represent given what it observes and its
+  size, that does best on the learner's own return.
 
-When the expert is one of the policies the learner can represent, the two coincide, and imitating the expert is the
-right goal. When it isn't, they can differ, and not just in degree. In the first environment below, the learner's best
-policy deliberately disagrees with the expert at its first decision: it takes the action that reveals what it needs to
-know to imitate the expert afterwards, even though that action matches the expert only half the time (no first action
-can do better).
+When the learner can represent the expert's policy, the two coincide, and imitating the expert is the right goal. When
+it can't, the policy closest to the expert and the learner's best policy can differ, and not just in degree. In the
+first environment below, the learner's best policy deliberately disagrees with the expert at its first decision: it
+takes the action that reveals what it needs to know to imitate the expert afterwards, even though that action matches
+the expert only half the time (no first action can do better).
 
 The methods in this post split by which target they aim at:
 
@@ -43,8 +45,8 @@ The methods in this post split by which target they aim at:
   the expert's and $-1$ when it doesn't, and credit each action with the agreement the learner itself goes on to
   achieve. It uses exactly the expert queries DAgger uses; only what it does with them differs.
 
-For each of the three reasons, I built the smallest environment I could find where this is all there is. All five
-methods get the same budget and the same tuning:
+For each of the three reasons, I built the smallest environment I could find where this is all there is. All methods get
+the same budget and the same tuning:
 
 <figure>
 <img class="theme-light" src="../assets/future-aware-imitation/summary-light.svg" alt="Bar chart of task success in three settings for DAgger, AggreVaTe, LOLS and APPO. Privileged information: DAgger 55, AggreVaTe 75 (a per-seed coin flip), LOLS 100, APPO 100. Partly random expert: DAgger 76, AggreVaTe 84, LOLS 100, APPO 100. Limited capacity with a degree-1 student: DAgger 17, AggreVaTe 0, LOLS 100, APPO 100.">
@@ -108,7 +110,7 @@ The two targets differ exactly where these two differ.
 > also depends on *which states the learner visits* ($d^t_\pi$), and choosing by $A^E$ at each observation no longer
 > finds the learner's best policy. The three environments are three ways this happens.
 
-**The methods.** All five roll out the learner and query the expert at the states it visits. Because the learner's
+**The methods.** All of them roll out the learner and query the expert at the states it visits. Because the learner's
 policy sees only $o_t$, every one of them, in effect, pools what it learns over the states that share an observation.
 What differs is **what** they pool:
 
@@ -153,7 +155,8 @@ observation.
 
 **The two targets.**
 
-- *Optimal policy:* play $z$ at every step, $J = 9$. It needs $z$ at the root, which the learner doesn't have.
+- *The expert's policy:* play $z$ at every step, $J = 9$. The learner can't represent it: it would need $z$ at the
+  root.
 - *The learner's best policy:* take action 1 at the root (reveal), then copy $z$: $J = 0 + 8 = 8$. In the episodes where
   $z = 0$ it disagrees with the expert at the root, on purpose. Taking action 0 instead would match the expert just as
   often at the root and then leave 8 steps of guessing: $J = 0$.
@@ -174,11 +177,11 @@ whatever happened at the root, since the expert always knows $z$) or by the lear
 - **DAgger** fits the expert's action, which is $z$: half the labels say 0 and half say 1, and its cross-entropy at the
   root is minimized at probability $\tfrac{1}{2}$. Every episode, it flips a fair coin between a future it can imitate
   and one it can't.
-- **AggreVaTe** aims at $\arg\max_a A^E$, the optimal policy's action. In each state that action is $z$, so the two kinds
-  of episode want opposite actions, and averaged over $z$ they cancel. Its estimates are correct; the target isn't
-  available. Revealing $z$ is worth nothing to an expert that already knows it, so nothing in $Q^E$ rewards it. In the
-  runs, its estimated gap between the two root actions ranges from $-0.025$ to $+0.027$ across seeds, within sampling
-  noise, and it reveals in 6 of 12 seeds.
+- **AggreVaTe** aims at $\arg\max_a A^E$, the action the expert rates best, which is the expert's own action. In each
+  state that action is $z$, so the two kinds of episode want opposite actions, and averaged over $z$ they cancel. Its
+  estimates are correct; the target isn't available. Revealing $z$ is worth nothing to an expert that already knows it,
+  so nothing in $Q^E$ rewards it. In the runs, its estimated gap between the two root actions ranges from $-0.025$ to
+  $+0.027$ across seeds, within sampling noise, and it reveals in 6 of 12 seeds.
 - **LOLS and APPO** pool $Q^\pi$, the return the learner itself gets. Revealing costs at most 2 at the root and gains 8
   afterwards, whatever $z$ is, so both kinds of episode prefer it and the average keeps the preference. (More precisely,
   if the learner copies $z$ correctly with probability $c$ after a reveal, the gain afterwards is $8(2c - 1)$, and
@@ -239,7 +242,8 @@ construction is more artificial than case 1, because the asymmetry is put into t
 
 **The two targets.**
 
-- *Optimal policy:* play $z$ at the root, then 0; it never enters the hard corridor. $J = 9$.
+- *The expert's policy:* play $z$ at the root, then 0; it never enters the hard corridor. $J = 9$. Again it needs $z$
+  at the root.
 - *The learner's best policy:* action 1 at the root, then 0. When $z = 0$ its root action is a mistake, but the
   recoverable one; it never risks the hard corridor. $J = 0 + 8 = 8$.
 
@@ -299,7 +303,8 @@ $\lceil (7 - k)/2 \rceil$ errors. Leaving the teacher's path costs exactly one e
 
 **The two targets.**
 
-- *Optimal policy:* the teacher: follow its path and play the parity, $J = 9$. It needs a student of degree 7.
+- *The teacher's policy:* follow its own path and play the parity, $J = 9$. Only a student of degree 7 can represent
+  it.
 - *The student's best policy:* for degree $k \le 4$, leave at the root and play 0: one error, $J = 7$. Following the
   teacher would cost at least 2 errors on its path. (For $k = 5$ and $6$ the two tie at one error; for $k = 7$ the
   student's best policy is the teacher.)
@@ -498,9 +503,9 @@ the last two rows evaluate the same degree-7 students against the stochastic tea
 
 ## What to take away
 
-- **When the learner can't imitate the expert, there are two targets.** The optimal policy is the expert; the learner's
-  best policy is the best one it can represent, and it can deliberately disagree with the expert, for example to reveal
-  information or to avoid states it can't handle.
+- **When the learner can't imitate the expert, there are two targets.** A method can aim at the expert's policy, which
+  the learner can't reach, or at the learner's best policy, the best one it can represent. The learner's best policy can
+  deliberately disagree with the expert, for example to reveal information or to avoid states it can't handle.
 - **Aiming at the expert gives the closest representable thing, not the learner's best policy.** DAgger fits the
   expert's action, and AggreVaTe the expert's best action ($\arg\max_a A^E$), which is optimal only for a policy that can
   choose at every state. Pooled over the states the learner can't tell apart, those targets can cancel (cases 1 and 2)
