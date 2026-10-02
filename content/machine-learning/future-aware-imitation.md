@@ -34,6 +34,9 @@ Which one depends on how closeness is measured, and two ways of measuring it lea
   counts too. Measured as the expected number of disagreements per episode, this closeness is exactly the return in
   disguise (see below), so this projection is **the best policy in $\Pi$**, the one with the highest return.
 
+<span class="emph-red">When the learner can't represent the expert, the per-state projection and the best policy in
+the learner's class are in general not the same policy.</span>
+
 If the expert's policy is in $\Pi$, both projections are the expert. If it isn't, they can differ, and not just in
 degree. In the first environment below, the per-state projection takes each first action half the time: the expert's
 choice, averaged over what the learner can't see. The best policy in $\Pi$ always takes the action that reveals what the

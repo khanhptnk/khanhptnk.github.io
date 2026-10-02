@@ -39,3 +39,12 @@ figure:not([data-rehype-pretty-code-figure]) {
     margin-top: 0.4rem;
   }
 }
+
+// A sentence the post wants to stand out, in red that reads on both themes.
+.emph-red {
+  color: #c62f2f;
+  font-weight: 700;
+}
+:root[saved-theme="dark"] .emph-red {
+  color: #ff6b6b;
+}
