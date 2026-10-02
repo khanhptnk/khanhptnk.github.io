@@ -19,44 +19,34 @@ for one of three reasons:
 - **Limited capacity.** The learner sees everything but is too small to represent the expert, as when a large model is
   distilled into a small one.
 
-## Two projections of the expert
+## Two targets
 
 Call $\Pi$ the set of policies the learner can represent: policies of what it observes, of the size it has. When the
-expert's policy is not in $\Pi$, every training method ends up at some policy in $\Pi$ that is "closest" to the expert.
-Which one depends on how closeness is measured, and two ways of measuring it lead to different policies:
+expert's policy is not in $\Pi$, a method has to settle somewhere in $\Pi$, and there are two natural places:
 
-- **The per-state projection** measures closeness at each state the learner visits, taking those states as given. It is
-  the policy in $\Pi$ whose action at each visited state best matches the expert's there; if the learner can choose
-  separately at each observation, with a log loss this is the expert's action distribution given what the learner
-  observes. Imitation learning computes this projection, with different per-state losses: DAgger uses the expert's
-  action as a label, AggreVaTe the expert's cost-to-go.
-- **The trajectory-level projection** measures closeness along the learner's own trajectories, so *where* a policy goes
-  counts too. Measured as the expected number of disagreements per episode, this closeness is exactly the return in
-  disguise (see below), so this projection is **the best policy in $\Pi$**, the one with the highest return.
+- **The projection of the expert onto $\Pi$:** the policy in $\Pi$ closest to the expert, by whatever measure of
+  closeness the method uses. For DAgger that is its imitation loss on the expert's actions; for AggreVaTe, the expert's
+  cost-to-go. This is where imitation learning settles.
+- **The best policy in $\Pi$:** the policy in $\Pi$ with the highest return.
 
-<span class="emph-red">When the learner can't represent the expert, the per-state projection and the best policy in
+<span class="emph-red">When the learner can't represent the expert, the projection of the expert and the best policy in
 the learner's class are in general not the same policy.</span>
 
-If the expert's policy is in $\Pi$, both projections are the expert. If it isn't, they can differ, and not just in
-degree. In the first environment below, the per-state projection takes each first action half the time: the expert's
-choice, averaged over what the learner can't see. The best policy in $\Pi$ always takes the action that reveals what the
-learner needs to know to imitate the expert afterwards, even though that action matches the expert only half the time
-(no first action can do better). The per-state projection can't make that choice: it never credits a policy for which
-states it visits.
+If the expert's policy is in $\Pi$, both are the expert. If it isn't, they can differ, and not just in degree. In the
+first environment below, DAgger's projection takes each first action half the time: the expert's choice, averaged over
+what the learner can't see. The best policy in $\Pi$ always takes the action that reveals what the learner needs to know
+to imitate the expert afterwards, even though that action matches the expert only half the time (no first action can do
+better).
 
-The methods in this post split by which projection they find:
+The methods in this post split by which of the two they find:
 
-- **DAgger** and **[AggreVaTe](https://arxiv.org/abs/1406.5979)** find the per-state projection: DAgger with the expert's
-  actions as labels, AggreVaTe with the action the expert would rate best.
-- **[LOLS](https://arxiv.org/abs/1502.02206)** and **Agreement PPO (APPO)** find the trajectory-level one, the best
-  policy in $\Pi$. APPO is the simplest way to do it: run PPO on the learner's own roll-outs with a reward of $+1$ when
-  the learner's action matches the expert's and $-1$ when it doesn't, and credit each action with the agreement the
-  learner itself goes on to achieve. It uses exactly the expert queries DAgger uses; only what it does with them
-  differs.
+- **DAgger** and **[AggreVaTe](https://arxiv.org/abs/1406.5979)** find the projection.
+- **[LOLS](https://arxiv.org/abs/1502.02206)** and **Agreement PPO (APPO)** find the best policy in $\Pi$. APPO is the
+  simplest way to do it: run PPO on the learner's own roll-outs with a reward of $+1$ when the learner's action matches
+  the expert's and $-1$ when it doesn't, and credit each action with the agreement the learner itself goes on to
+  achieve. It uses exactly the expert queries DAgger uses; only what it does with them differs.
 
-The distillation experiments at the end extend this to other notions of closeness: the standard per-token distillation
-objectives are per-state projections under different divergences, and the same objectives optimized with returns are
-trajectory-level ones.
+The distillation experiments at the end make the same comparison among distillation objectives.
 
 For each of the three reasons, I built the smallest environment I could find where this is all there is. All methods get
 the same budget and the same tuning:
@@ -64,12 +54,11 @@ the same budget and the same tuning:
 <figure>
 <img class="theme-light" src="../assets/future-aware-imitation/summary-light.svg" alt="Bar chart of task success in three settings for DAgger, AggreVaTe, LOLS and APPO. Privileged information: DAgger 55, AggreVaTe 75 (a per-seed coin flip), LOLS 100, APPO 100. Partly random expert: DAgger 76, AggreVaTe 84, LOLS 100, APPO 100. Limited capacity with a degree-1 student: DAgger 17, AggreVaTe 0, LOLS 100, APPO 100.">
 <img class="theme-dark" src="../assets/future-aware-imitation/summary-dark.svg" alt="Bar chart of task success in three settings for DAgger, AggreVaTe, LOLS and APPO. Privileged information: DAgger 55, AggreVaTe 75 (a per-seed coin flip), LOLS 100, APPO 100. Partly random expert: DAgger 76, AggreVaTe 84, LOLS 100, APPO 100. Limited capacity with a degree-1 student: DAgger 17, AggreVaTe 0, LOLS 100, APPO 100.">
-<figcaption>Figure 1. Task success, meaning at most 2 disagreements with the expert in a 9-step episode (a metric no method trains on), mean over 12 seeds. Blue methods find the per-state projection of the expert onto the learner's class; orange ones the trajectory-level projection, the best policy in that class. For limited capacity the student is a degree-1 polynomial; Figure 8 covers every size.</figcaption>
+<figcaption>Figure 1. Task success, meaning at most 2 disagreements with the expert in a 9-step episode (a metric no method trains on), mean over 12 seeds. Blue methods find the projection of the expert onto the learner's class; orange ones the best policy in that class. For limited capacity the student is a degree-1 polynomial; Figure 8 covers every size.</figcaption>
 </figure>
 
 *Table 1. The first move of the best policy in the learner's class, in each setting, and which methods make it. DAgger
-and AggreVaTe find the per-state projection of the expert; LOLS and APPO find the trajectory-level one, the best policy in
-the class.*
+and AggreVaTe find the projection of the expert; LOLS and APPO find the best policy in the class.*
 
 | Setting | Best policy's first move | DAgger, AggreVaTe | LOLS, APPO |
 |---|---|---|---|
@@ -103,10 +92,7 @@ $$
 J(\pi) = \mathbb{E}_{\tau \sim \pi}\Big[\sum_{t=0}^{8} r_t\Big],
 $$
 
-which is 9 minus twice the expected number of disagreements. The expert scores $J = 9$. So the policy in $\Pi$ with the
-fewest expected disagreements along its own trajectories, the trajectory-level projection, is exactly the best policy
-in $\Pi$; the per-state projection, which
-counts disagreements state by state at fixed states, need not be.
+which is 9 minus twice the expected number of disagreements. The expert scores $J = 9$.
 
 **Two ways to value an action.** Take action $a$ in state $s$ at step $t$, then let some policy play the rest of the
 episode. The expected return from $t$ on depends on who plays the rest:
@@ -115,7 +101,7 @@ episode. The expected return from $t$ on depends on who plays the rest:
   $V^E_t(s)$ is the expert's own value.
 - $Q^\pi_t(s, a)$: the **learner** plays the rest.
 
-The two projections differ exactly where these two values differ.
+The two targets differ exactly where these two values differ.
 
 > [!note] When is following the expert's advantage enough?
 > The performance difference lemma says that for any policy $\pi$,
@@ -125,7 +111,7 @@ The two projections differ exactly where these two values differ.
 > whatever states it visits. That needs the policy to choose separately at every state. A learner that sees only $o_t$
 > can't, wherever two states with different best actions look the same to it. Then not every term can be 0, the regret
 > also depends on *which states the learner visits* ($d^t_\pi$), and choosing by $A^E$ at each observation no longer
-> finds the best policy in $\Pi$: it finds the per-state projection. The three environments are three ways this happens.
+> finds the best policy in $\Pi$: it finds a projection of the expert. The three environments are three ways this happens.
 
 **The methods.** All of them roll out the learner and query the expert at the states it visits. Because the learner's
 policy sees only $o_t$, every one of them, in effect, pools what it learns over the states that share an observation.
@@ -133,10 +119,10 @@ What differs is **what** they pool:
 
 | Method | The value of an action | Finds |
 |---|---|---|
-| DAgger | none: it fits the expert's action as a label | the per-state projection, by the expert's action |
-| AggreVaTe | $Q^E$, the return when the expert plays the rest | the per-state projection, by $\arg\max_a A^E$ |
-| LOLS | $Q^\pi$, the return when the learner plays the rest, every action tried | the trajectory-level projection: the best policy in $\Pi$ |
-| APPO | $Q^\pi$, the episode's own return from that step on | the trajectory-level projection: the best policy in $\Pi$ |
+| DAgger | none: it fits the expert's action as a label | the projection (by its loss on the expert's actions) |
+| AggreVaTe | $Q^E$, the return when the expert plays the rest | the projection (by the expert's cost-to-go) |
+| LOLS | $Q^\pi$, the return when the learner plays the rest, every action tried | the best policy in $\Pi$ |
+| APPO | $Q^\pi$, the episode's own return from that step on | the best policy in $\Pi$ |
 
 AggreVaTe ([Ross & Bagnell, 2014](https://arxiv.org/abs/1406.5979)) picks a random step of a learner roll-out, takes a
 random action there, and lets the expert finish. LOLS ([Chang et al., 2015](https://arxiv.org/abs/1502.02206)) tries every
@@ -170,13 +156,13 @@ whatever it does there, it matches the expert with probability $\tfrac{1}{2}$. I
 root action: after action 1 they show $z$, after action 0 they don't. The policy is tabular, one probability per
 observation.
 
-**The expert and its two projections.**
+**The two targets.**
 
 - *The expert's policy* plays $z$ at every step, $J = 9$. It is not in $\Pi$: it would need $z$ at the root.
-- *Its per-state projection onto $\Pi$:* at the root, the expert's action given what the learner sees is 0 or 1 with probability
+- *Its projection onto $\Pi$ (DAgger's):* at the root, the expert's action given what the learner sees is 0 or 1 with probability
   $\tfrac{1}{2}$ each, so the projection takes each half the time. Afterwards it copies $z$ after a reveal and guesses
   after a hide. $J = \tfrac{1}{2} \cdot 8 + \tfrac{1}{2} \cdot 0 = 4$.
-- *The best policy in $\Pi$, its trajectory-level projection:* take action 1 at the root (reveal), then copy $z$: $J = 0 + 8 = 8$. In the episodes where
+- *The best policy in $\Pi$:* take action 1 at the root (reveal), then copy $z$: $J = 0 + 8 = 8$. In the episodes where
   $z = 0$ it disagrees with the expert at the root, on purpose. Taking action 0 instead would match the expert just as
   often at the root and then leave 8 steps of guessing: $J = 0$.
 
@@ -260,13 +246,13 @@ corridor, and the mistake "0 when $z = 1$" a hard corridor. In the easy and reco
 it isn't missing any information; in the hard corridor nothing anyone could observe would predict the expert. This
 construction is more artificial than case 1, because the asymmetry is put into the expert directly.
 
-**The expert and its two projections.**
+**The two targets.**
 
 - *The expert's policy* plays $z$ at the root, then 0; it never enters the hard corridor. $J = 9$. It is not in $\Pi$:
   it needs $z$ at the root.
-- *Its per-state projection onto $\Pi$:* each root action half the time, then 0 in the easy and recoverable corridors and a guess
+- *Its projection onto $\Pi$ (DAgger's):* each root action half the time, then 0 in the easy and recoverable corridors and a guess
   in the hard one. It enters the hard corridor in a quarter of the episodes: $J = \tfrac{3}{4} \cdot 8 = 6$.
-- *The best policy in $\Pi$, its trajectory-level projection:* action 1 at the root, then 0. When $z = 0$ its root action is a mistake, but the
+- *The best policy in $\Pi$:* action 1 at the root, then 0. When $z = 0$ its root action is a mistake, but the
   recoverable one; it never risks the hard corridor. $J = 0 + 8 = 8$.
 
 **What each method sees at the root.**
@@ -323,12 +309,12 @@ logistic policy whose logit is a polynomial of degree $k$ in $t$. Degree 7 is en
 polynomial of degree $k$ changes sign at most $k$ times, so on the teacher's path a smaller student makes at least
 $\lceil (7 - k)/2 \rceil$ errors. Leaving the teacher's path costs exactly one error, and branch 1 is easy at any size.
 
-**The teacher and its two projections.** Here $\Pi$ is the set of degree-$k$ students.
+**The two targets.** Here $\Pi$ is the set of degree-$k$ students.
 
 - *The teacher's policy* follows its own path and plays the parity, $J = 9$. It is in $\Pi$ only for $k = 7$.
-- *Its per-state projection onto $\Pi$:* copy the teacher's root action, then the degree-$k$ policy closest to the parity on the
+- *Its projection onto $\Pi$:* copy the teacher's root action, then the degree-$k$ policy closest to the parity on the
   teacher's path. For $k = 1$ that path costs at least 3 errors, so $J \le 1 + (5 - 3) = 3$.
-- *The best policy in $\Pi$, its trajectory-level projection:* for $k \le 4$, leave at the root and play 0: one error, $J = 7$. (For $k = 5$ and $6$
+- *The best policy in $\Pi$:* for $k \le 4$, leave at the root and play 0: one error, $J = 7$. (For $k = 5$ and $6$
   leaving and following tie at one error; for $k = 7$ the best policy in $\Pi$ is the teacher.)
 
 **What each method sees at the root.** Here nothing is hidden, so there is only one root state and nothing to average.
@@ -369,19 +355,16 @@ degree 1 and 0 at degree 7. ↓ lower is better; the best value in each column i
   labels at $t$ and $9 - t$ are opposite, so even-degree terms don't help.) AggreVaTe's 2 errors from degree 3 to 6 fall
   within the success threshold, which is why errors per episode is the better measure here.
 - **LOLS and APPO leave the teacher's path** and make exactly one error per episode at every size below 7.
-- **At degree 7 the two projections coincide (both are the teacher), and everyone follows it.** DAgger, AggreVaTe and LOLS imitate it
+- **At degree 7 the two targets coincide (both are the teacher), and everyone follows it.** DAgger, AggreVaTe and LOLS imitate it
   exactly. APPO does too when played greedily, but only at the right step size: tuning picked 0.5, while every step size
   of 2 or more commits to the easy branch before learning the parity and ends with a return of 7 instead of 9.
 
 ### With a stochastic teacher
 
 Language-model teachers are distributions, and the standard distillation objectives compare distributions. So make the
-teacher put probability 0.9 on the action above in every state, including the root, and 0.1 on the other. Each
-distillation objective is its own notion of closeness to the teacher, so each finds its own projection of the teacher
-onto the degree-$k$ students. The per-token objectives measure closeness state by state, at the teacher's states
-(off-policy) or the student's (on-policy): they are per-state projections under different divergences. The same
-objectives optimized with returns measure it along the student's own episodes: trajectory-level projections. Six ways
-of training the student, with the same budget:
+teacher put probability 0.9 on the action above in every state, including the root, and 0.1 on the other. The per-token
+objectives below find projections of the teacher, each by its own divergence; the objectives with returns find the best
+student for their objective. Six ways of training the student, with the same budget:
 
 - **Off-policy KD:** cross-entropy to the teacher's distribution on episodes the *teacher* generates, as in word-level
   and sequence-level knowledge distillation ([Hinton et al., 2015](https://arxiv.org/abs/1503.02531);
@@ -425,7 +408,7 @@ value in each column is in bold. † Stopped early by its tuning; see below.*
 | Rev. KL, returns | 0.840 | 2.12 | **2.13** | 3.90 |
 | APPO | 1.000 | **1.00** | 3.15 | 50 ± 15 |
 
-- **Per-token objectives are per-state projections, and follow the teacher at every student size.** Off-policy KD, on-policy forward KL
+- **Per-token objectives follow the teacher at every student size.** Off-policy KD, on-policy forward KL
   and on-policy JSD leave the teacher's path with the teacher's own probability, 0.1. This holds for any per-token
   divergence: the root has its own parameter, and each such objective's target there is the teacher's root
   distribution, whatever comes after. (Off-policy KD and on-policy forward KL even coincide here: within a branch every step is visited equally often
@@ -436,7 +419,7 @@ value in each column is in bold. † Stopped early by its tuning; see below.*
   passes through better points: tuned by that same reverse KL, it stops partway, with step size 0.002, while its root
   probability is still falling from the initial $\tfrac{1}{2}$ toward the teacher's 0.1. That is the 0.38 in Table 5.
   Even its best stopping point is worse than reverse KL with returns (2.74 against 2.13 nats).
-- **Objectives with returns are trajectory-level projections, and leave.** Where the optimum of the sequence-level reverse KL can be worked out by hand, reverse
+- **Objectives with returns leave.** Where the optimum of the sequence-level reverse KL can be worked out by hand, reverse
   KL with returns reaches it. For $k = 0$, the best a student can do on the teacher's path is a coin flip, which costs
   $8\,\mathrm{KL}(\mathrm{Bern}(0.5) \,\|\, \mathrm{Bern}(0.9)) = 4.087$ nats. The optimum then leaves with probability
   $0.1 / (0.1 + 0.9\,e^{-4.087}) = 0.869$, at a KL of 2.162 nats; training reaches 0.866 and 2.162.
@@ -528,12 +511,11 @@ the last two rows evaluate the same degree-7 students against the stochastic tea
 
 ## What to take away
 
-- **When the learner can't represent the expert, "the closest policy to the expert" depends on how closeness is
-  measured.** Measured state by state, at the states the learner visits, it is the per-state projection. Measured along
-  the learner's own trajectories, it is the best policy in the learner's class, which can deliberately disagree with
-  the expert, for example to reveal information or to avoid states it can't handle. The per-state projection can't: it
-  matches the expert as closely as it can at every state, wherever that leads.
-- **Imitation finds the per-state projection.** DAgger fits the expert's action, and AggreVaTe the expert's best action
+- **When the learner can't represent the expert, the projection of the expert onto its class and the best policy in
+  that class are different policies.** The best policy can deliberately disagree with the expert, for example to reveal
+  information or to avoid states it can't handle. The projection can't: it is as close to the expert as the method's
+  measure of closeness allows, wherever that leads.
+- **Imitation finds the projection.** DAgger fits the expert's action, and AggreVaTe the expert's best action
   ($\arg\max_a A^E$), which is optimal only for a policy that can choose at every state. Pooled over the states the
   learner can't tell apart, those targets can cancel (cases 1 and 2) or point the wrong way (case 3).
 - **What separates the two kinds of method is whose future scores an action, not looking ahead as such.** AggreVaTe
