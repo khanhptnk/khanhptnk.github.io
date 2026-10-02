@@ -116,20 +116,20 @@ What differs is **what** they pool:
 | DAgger | matching the expert's action now | nobody | the expert's action | supervised fit |
 | AggreVaTe | the return from that step on, $Q^E$ | the expert | the expert's best action, $\arg\max_a A^E$ | cost-sensitive classifier |
 | LOLS ($\beta = 0$) | the return from that step on, $Q^\pi$, both actions tried from the same state | the learner | the learner's best policy | cost-sensitive classifier |
-| APPO, AGRPO | the episode's own return from that step on, $Q^\pi$ | the learner | the learner's best policy | clipped policy gradient |
+| APPO | the episode's own return from that step on, $Q^\pi$ | the learner | the learner's best policy | clipped policy gradient |
 
 AggreVaTe ([Ross & Bagnell, 2014](https://arxiv.org/abs/1406.5979)) picks a random step of a learner roll-out, takes a
 random action there, and lets the expert finish. LOLS ([Chang et al., 2015](https://arxiv.org/abs/1502.02206)) tries both
 actions at the random step and lets the learner finish each (or, with probability $\beta$, the expert). APPO tries
 nothing on purpose: it credits every action the learner takes with that episode's return from that step on, minus the
-average at the same observation, and takes PPO's clipped gradient steps. AGRPO uses the same reward with a minimal
-GRPO-style update (a trajectory's total agreement, normalized within a group, is the advantage of all its actions). With
+average at the same observation, and takes PPO's clipped gradient steps. (A GRPO-style version, with group-normalized trajectory returns as
+the advantage, behaves like APPO in every setting; its results are in the code repository.) With
 $\beta = 0$, LOLS and APPO maximize the same objective, $J$, by two different reinforcement learning methods: approximate
 policy iteration with explicit roll-outs, and policy gradient.
 
 **Protocol.** Every method simulates the same number of episodes per training run, 368,640, counting roll-ins and
 roll-outs alike (so LOLS, which plays three episodes per roll-in, gets a third as many iterations as APPO). Each tunable
-knob, the learning rate of APPO and AGRPO (twelve values from 0.0075 to 16; sixteen from 0.0005 for the distillation
+knob, the learning rate of APPO (twelve values from 0.0075 to 16; sixteen from 0.0005 for the distillation
 objectives in case 3) and $\beta \in \{0, 0.5\}$ for LOLS, is searched separately in every setting on five tuning seeds,
 selecting by $J$; the chosen setting is then trained on twelve other seeds, which are what's reported. DAgger and
 AggreVaTe fit their data exactly and have nothing to tune. In every environment, the decision that matters is the first
@@ -200,7 +200,6 @@ learner's best policy makes 0.5 errors per episode with 100% success. "Greedy" p
 | AggreVaTe | 0.50 ± 0.52 | 2.50 ± 2.09 | 75.0% ± 26.1% | 2.50 ± 2.09 |
 | LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
 | APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
-| AGRPO | 0.996 ± 0.004 | 0.52 ± 0.02 | 99.8% ± 0.2% | 0.50 ± 0.00 |
 
 DAgger lands exactly where the analysis puts it. Half its episodes take the revealing branch and succeed; the other half
 are 9 coin flips, which succeed with probability $P(\mathrm{Bin}(9, \tfrac{1}{2}) \le 2) = 46/512$, so its success rate is
@@ -210,9 +209,9 @@ hidden-branch episodes are all-or-nothing. Played greedily, DAgger also becomes 
 and APPO reveal in every seed and reach the learner's best policy.
 
 <figure>
-<img class="theme-light" src="../assets/future-aware-imitation/root-light.svg" alt="Probability of the revealing action against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders between 0.2 and 0.6 as its seeds switch actions with sampling noise; LOLS, APPO and AGRPO reach 1 within about 20,000 episodes.">
-<img class="theme-dark" src="../assets/future-aware-imitation/root-dark.svg" alt="Probability of the revealing action against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders between 0.2 and 0.6 as its seeds switch actions with sampling noise; LOLS, APPO and AGRPO reach 1 within about 20,000 episodes.">
-<figcaption>Figure 3. The root decision during training (mean over 12 seeds; shaded: range across seeds for DAgger, APPO and AGRPO). Every method's x-axis ends at the same budget. Each AggreVaTe seed plays one root action deterministically, and which one keeps changing as sampling noise flips its estimated gap.</figcaption>
+<img class="theme-light" src="../assets/future-aware-imitation/root-light.svg" alt="Probability of the revealing action against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders between 0.2 and 0.6 as its seeds switch actions with sampling noise; LOLS and APPO reach 1 within about 20,000 episodes.">
+<img class="theme-dark" src="../assets/future-aware-imitation/root-dark.svg" alt="Probability of the revealing action against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders between 0.2 and 0.6 as its seeds switch actions with sampling noise; LOLS and APPO reach 1 within about 20,000 episodes.">
+<figcaption>Figure 3. The root decision during training (mean over 12 seeds; shaded: range across seeds for DAgger and APPO). Every method's x-axis ends at the same budget. Each AggreVaTe seed plays one root action deterministically, and which one keeps changing as sampling noise flips its estimated gap.</figcaption>
 </figure>
 
 <figure>
@@ -271,13 +270,12 @@ recoverable; the learner's best policy makes 0.5 errors per episode with 100% su
 | AggreVaTe | 0.67 ± 0.49 | 1.16 ± 0.98 | 84.0% ± 23.7% | 1.16 ± 0.98 |
 | LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
 | APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
-| AGRPO | 0.988 ± 0.009 | 0.53 ± 0.02 | 99.4% ± 0.4% | 0.50 ± 0.00 |
 
 AggreVaTe picks the recoverable side in 8 of 12 seeds, which is again chance: its estimated values tie.
 
 <figure>
-<img class="theme-light" src="../assets/future-aware-imitation/root-hard-light.svg" alt="Probability of the recoverable side against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders as its seeds switch sides; LOLS, APPO and AGRPO rise to about 1.">
-<img class="theme-dark" src="../assets/future-aware-imitation/root-hard-dark.svg" alt="Probability of the recoverable side against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders as its seeds switch sides; LOLS, APPO and AGRPO rise to about 1.">
+<img class="theme-light" src="../assets/future-aware-imitation/root-hard-light.svg" alt="Probability of the recoverable side against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders as its seeds switch sides; LOLS and APPO rise to about 1.">
+<img class="theme-dark" src="../assets/future-aware-imitation/root-hard-dark.svg" alt="Probability of the recoverable side against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders as its seeds switch sides; LOLS and APPO rise to about 1.">
 <figcaption>Figure 6. The root decision during training with a partly random expert (mean over 12 seeds).</figcaption>
 </figure>
 
@@ -327,16 +325,14 @@ represent the teacher.*
 | degree 1 | AggreVaTe | 0.000 | 4.00 | 0.0% | 4.00 |
 | degree 1 | LOLS | 1.000 | 1.00 | 100.0% | 1.00 |
 | degree 1 | APPO | 1.000 | 1.00 | 100.0% | 1.00 |
-| degree 1 | AGRPO | 1.000 | 1.00 | 100.0% | 1.00 |
 | degree 7 | DAgger | 0.000 | 0.00 | 100.0% | 0.00 |
 | degree 7 | AggreVaTe | 0.000 | 0.00 | 100.0% | 0.00 |
 | degree 7 | LOLS | 0.000 | 0.00 | 100.0% | 0.00 |
 | degree 7 | APPO | 0.002 | 0.06 | 100.0% | 0.00 |
-| degree 7 | AGRPO | 0.001 | 0.03 | 100.0% | 0.00 |
 
 <figure>
-<img class="theme-light" src="../assets/future-aware-imitation/distill-light.svg" alt="Disagreements per episode against the student's polynomial degree from 0 to 7. DAgger falls from 4 errors at degree 0 to 2.5 at degree 6; AggreVaTe makes 4 errors up to degree 2 and 2 errors from degree 3 to 6; both reach 0 at degree 7. LOLS, APPO and AGRPO make 1 error at every degree below 7 and about 0 at degree 7.">
-<img class="theme-dark" src="../assets/future-aware-imitation/distill-dark.svg" alt="Disagreements per episode against the student's polynomial degree from 0 to 7. DAgger falls from 4 errors at degree 0 to 2.5 at degree 6; AggreVaTe makes 4 errors up to degree 2 and 2 errors from degree 3 to 6; both reach 0 at degree 7. LOLS, APPO and AGRPO make 1 error at every degree below 7 and about 0 at degree 7.">
+<img class="theme-light" src="../assets/future-aware-imitation/distill-light.svg" alt="Disagreements per episode against the student's polynomial degree from 0 to 7. DAgger falls from 4 errors at degree 0 to 2.5 at degree 6; AggreVaTe makes 4 errors up to degree 2 and 2 errors from degree 3 to 6; both reach 0 at degree 7. LOLS and APPO make 1 error at every degree below 7 and about 0 at degree 7.">
+<img class="theme-dark" src="../assets/future-aware-imitation/distill-dark.svg" alt="Disagreements per episode against the student's polynomial degree from 0 to 7. DAgger falls from 4 errors at degree 0 to 2.5 at degree 6; AggreVaTe makes 4 errors up to degree 2 and 2 errors from degree 3 to 6; both reach 0 at degree 7. LOLS and APPO make 1 error at every degree below 7 and about 0 at degree 7.">
 <figcaption>Figure 8. Distillation from a deterministic teacher into students of every size (mean over 12 seeds). The dotted steps are the fewest errors a student of that size can make on the teacher's path; the dashed line is the one error of leaving it.</figcaption>
 </figure>
 
@@ -345,7 +341,7 @@ represent the teacher.*
   probabilities, not the policy with the fewest errors. (Degrees pair up, 1 with 2 and so on, because the teacher's
   labels at $t$ and $9 - t$ are opposite, so even-degree terms don't help.) AggreVaTe's 2 errors from degree 3 to 6 fall
   within the success threshold, which is why errors per episode is the better measure here.
-- **LOLS, APPO and AGRPO leave the teacher's path** and make exactly one error per episode at every size below 7.
+- **LOLS and APPO leave the teacher's path** and make exactly one error per episode at every size below 7.
 - **At degree 7 the two targets coincide, and everyone follows the teacher.** DAgger, AggreVaTe and LOLS imitate it
   exactly. APPO does too when played greedily, but only at the right step size: tuning picked 0.5, while every step size
   of 2 or more commits to the easy branch before learning the parity and ends with a return of 7 instead of 9.
@@ -434,6 +430,25 @@ APPO's advantage is specific to choosing among unavoidable mistakes. The experim
   state and fits a deterministic classifier. Its price is the ability to restart from intermediate states and play one
   extra episode per action, which APPO doesn't need.
 
+- **An entropy bonus changes neither the choice nor the collapse.** APPO here has no entropy bonus. Adding one (Table 6)
+  changes no decision up to $c = 0.1$, and errors rise by at most 0.02. From $c = 0.3$ on, the policy stays random where it should be
+  decisive and errors rise, while the root decisions mostly hold (at $c = 1$ a few seeds waver in case 2 and at degree 7).
+  With the stochastic teacher it trades errors for KL, but at $c = 0.3$ the KLs (0.58 and 3.45 nats) are still far from
+  those of reverse KL with returns (0.02) and of the per-token objectives (0). With a degree-1 student it has no effect at
+  all: at the tuned step size the student's logits saturate within a few iterations, and at saturation the entropy
+  gradient, $-\theta\, p(1 - p)$ for a logit $\theta$ with $p = \sigma(\theta)$, vanishes.
+
+*Table 6. APPO with an entropy bonus of weight $c$, at APPO's tuned step size (12 seeds). Errors per episode in each
+case; the last three columns are case 3 with the stochastic teacher and a degree-7 student, with the sequence-level
+KLs in nats.*
+
+| $c$ | Case 1 | Case 2 | Case 3, degree 1 | Case 3, degree 7 | Stochastic, errors | Rev. KL | Fwd. KL |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.50 | 0.50 | 1.00 | 0.06 | 0.06 | 0.74 | 5.26 |
+| 0.1 | 0.50 | 0.51 | 1.00 | 0.08 | 0.08 | 0.70 | 4.69 |
+| 0.3 | 1.27 | 1.34 | 1.00 | 0.14 | 0.14 | 0.58 | 3.45 |
+| 1 | 2.00 | 1.84 | 1.00 | 2.93 | 2.93 | 2.10 | 1.58 |
+
 ## Related work
 
 - **The objective.** [Ross et al. (2011)](https://arxiv.org/abs/1011.0686) define imitation's goal as minimizing the
@@ -494,7 +509,7 @@ APPO's advantage is specific to choosing among unavoidable mistakes. The experim
 ## Setup details
 
 - **Budget and tuning:** 368,640 simulated episodes per training run for every method, roll-outs included. Learning rates
-  for APPO and AGRPO are searched over twelve values from 0.0075 to 16 (each roughly double the last), those of the RL
+  for APPO are searched over twelve values from 0.0075 to 16 (each roughly double the last), those of the RL
   distillation objectives over sixteen values from 0.0005 to 16, and $\beta \in \{0, 0.5\}$ for LOLS, separately in every setting, on seeds 100–104; the chosen values
   are retrained and reported on seeds 0–11. Evaluation uses 50,000 fresh episodes from `default_rng(9000 + seed)`, except
   with the stochastic teacher, where it is exact. Every trial and chosen value is in `results/*.json` in the code
@@ -509,17 +524,18 @@ APPO's advantage is specific to choosing among unavoidable mistakes. The experim
 - **APPO:** 120 iterations × 3,072 episodes. Advantage: reward-to-go minus the batch-mean reward-to-go at the same
   observation, divided by the global standard deviation; no value network. Clipped surrogate ($\epsilon = 0.2$), 4
   full-batch epochs of gradient ascent. Each observation's logit takes the mean gradient over the samples at that
-  observation. Chosen learning rate: 16 in cases 1 and 2 and for students of degree 0 to 6, 0.5 for degree 7.
-- **AGRPO:** 240 iterations × 192 groups of 8 trajectories (sharing $z$ in cases 1 and 2). Each trajectory's total return
-  is normalized within its group and used as the advantage of all its actions; the same clipped update. No KL term or
-  reference policy.
+  observation. No entropy bonus and no KL term (see [What APPO costs](#what-appo-costs) for an entropy ablation). Chosen
+  learning rate: 16 in cases 1 and 2 and for students of degree 0 to 6, 0.5 for degree 7.
+- **AGRPO** (in the code, not shown): the same reward with a minimal GRPO-style update, 240 iterations × 192 groups of 8
+  trajectories; each trajectory's total return, normalized within its group, is the advantage of all its actions.
 - **Limited capacity:** the student's features are Legendre polynomials of $t$ rescaled to $[-1, 1]$, one set per
   branch, plus a root logit. DAgger, off-policy KD and on-policy forward KL refit the student to the aggregated labels
   exactly (by Newton's method); on-policy JSD takes 60 Adam steps per iteration. The RL variants use APPO's update
   through the features.
 - **Original settings.** The original note's PPO and GRPO settings (learning rate 0.065, with a third of the budget for
-  DAgger and half for GRPO) are reproduced by `python reproduce.py --note`. Under them APPO and AGRPO still learn the right
-  root action, more slowly, and end with stochastic policies that make about 0.9 errors per episode.
+  DAgger and half for GRPO) are reproduced by `python reproduce.py --note`. Under them APPO still learns the right root
+  action, more slowly, and ends with a stochastic policy that makes about 0.9
+  errors per episode.
 
 ## Limitations
 
