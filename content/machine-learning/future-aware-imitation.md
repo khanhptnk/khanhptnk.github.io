@@ -558,7 +558,9 @@ the last two rows evaluate the same degree-7 students against the stochastic tea
 - **Limited capacity:** the student's features are Legendre polynomials of $t$ rescaled to $[-1, 1]$, one set per
   branch, plus a root logit. DAgger, off-policy KD and on-policy forward KL refit the student to the aggregated labels
   exactly (by Newton's method); on-policy JSD takes 60 Adam steps per iteration. The RL variants use APPO's update
-  through the features.
+  through the features: each state's mean gradient, as above, then the chain rule to the polynomial's coefficients. So
+  every visited state counts equally in the update, not in proportion to how often it is visited (in a fixed-horizon
+  branch every step is visited equally often anyway; only the root and the two branches differ).
 - **Original settings.** The original note's PPO and GRPO settings (learning rate 0.065, with a third of the budget for
   DAgger and half for GRPO) are reproduced by `python reproduce.py --note`. Under them APPO still learns the right root
   action, more slowly, and ends with a stochastic policy that makes about 0.9
