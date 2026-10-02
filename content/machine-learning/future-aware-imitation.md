@@ -14,25 +14,27 @@ labels with supervised learning. That is the right thing to do when the learner 
 for one of three reasons:
 
 - **Privileged information.** The expert sees something the learner doesn't, such as a hidden goal or the true state.
-- **A partly random expert.** In some states the expert's choices are random, so nothing the learner could observe
-  predicts them.
+- **A stochastic expert.** In some states the expert's choices are random, so no one, however much they observe, can
+  predict them.
 - **Limited capacity.** The learner sees everything but is too small to represent the expert, as when a large model is
   distilled into a small one.
 
 ## Two targets
 
 Call $\Pi$ the set of policies the learner can represent: policies of what it observes, of the size it has. When the
-expert's policy is not in $\Pi$, a method has to settle somewhere in $\Pi$, and there are two natural places:
+learner can't imitate the expert, that is, can't reproduce the expert's actions, a method has to settle somewhere in
+$\Pi$, and there are two natural places:
 
 - **The projection of the expert onto $\Pi$:** the policy in $\Pi$ closest to the expert, by whatever measure of
   closeness the method uses. For DAgger that is its imitation loss on the expert's actions; for AggreVaTe, the expert's
   cost-to-go. This is where imitation learning settles.
 - **The best policy in $\Pi$:** the policy in $\Pi$ with the highest return.
 
-<span class="emph-red">When the learner can't represent the expert, the projection of the expert and the best policy in
+<span class="emph-red">When the learner can't imitate the expert, the projection of the expert and the best policy in
 the learner's class are in general not the same policy.</span>
 
-If the expert's policy is in $\Pi$, both are the expert. If it isn't, they can differ, and not just in degree. In the
+If the learner can reproduce the expert's actions, both are the expert. If it can't, they can differ, and not just in
+degree. In the
 first environment below, DAgger's projection takes each first action half the time: the expert's choice, averaged over
 what the learner can't see. The best policy in $\Pi$ always takes the action that reveals what the learner needs to know
 to imitate the expert afterwards, even though that action matches the expert only half the time (no first action can do
@@ -52,8 +54,8 @@ For each of the three reasons, I built the smallest environment I could find whe
 the same budget and the same tuning:
 
 <figure>
-<img class="theme-light" src="../assets/future-aware-imitation/summary-light.svg" alt="Bar chart of task success in three settings for DAgger, AggreVaTe, LOLS and APPO. Privileged information: DAgger 55, AggreVaTe 75 (a per-seed coin flip), LOLS 100, APPO 100. Partly random expert: DAgger 76, AggreVaTe 84, LOLS 100, APPO 100. Limited capacity with a degree-1 student: DAgger 17, AggreVaTe 0, LOLS 100, APPO 100.">
-<img class="theme-dark" src="../assets/future-aware-imitation/summary-dark.svg" alt="Bar chart of task success in three settings for DAgger, AggreVaTe, LOLS and APPO. Privileged information: DAgger 55, AggreVaTe 75 (a per-seed coin flip), LOLS 100, APPO 100. Partly random expert: DAgger 76, AggreVaTe 84, LOLS 100, APPO 100. Limited capacity with a degree-1 student: DAgger 17, AggreVaTe 0, LOLS 100, APPO 100.">
+<img class="theme-light" src="../assets/future-aware-imitation/summary-light.svg" alt="Bar chart of task success in three settings for DAgger, AggreVaTe, LOLS and APPO. Privileged information: DAgger 55, AggreVaTe 75 (a per-seed coin flip), LOLS 100, APPO 100. Stochastic expert: DAgger 76, AggreVaTe 84, LOLS 100, APPO 100. Limited capacity with a degree-1 student: DAgger 17, AggreVaTe 0, LOLS 100, APPO 100.">
+<img class="theme-dark" src="../assets/future-aware-imitation/summary-dark.svg" alt="Bar chart of task success in three settings for DAgger, AggreVaTe, LOLS and APPO. Privileged information: DAgger 55, AggreVaTe 75 (a per-seed coin flip), LOLS 100, APPO 100. Stochastic expert: DAgger 76, AggreVaTe 84, LOLS 100, APPO 100. Limited capacity with a degree-1 student: DAgger 17, AggreVaTe 0, LOLS 100, APPO 100.">
 <figcaption>Figure 1. Task success, meaning at most 2 disagreements with the expert in a 9-step episode (a metric no method trains on), mean over 12 seeds. Blue methods find the projection of the expert onto the learner's class; orange ones the best policy in that class. For limited capacity the student is a degree-1 polynomial; Figure 8 covers every size.</figcaption>
 </figure>
 
@@ -63,7 +65,7 @@ and AggreVaTe find the projection of the expert; LOLS and APPO find the best pol
 | Setting | Best policy's first move | DAgger, AggreVaTe | LOLS, APPO |
 |---|---|---|---|
 | Privileged information | reveal the hidden information | indifferent | reveal |
-| Partly random expert | the mistake that avoids the random states | indifferent | make that mistake |
+| Stochastic expert | the mistake that avoids the random states | indifferent | make that mistake |
 | Limited capacity | leave the teacher's path | follow the teacher | leave |
 
 LOLS and APPO do equally well here; they differ in how they optimize, and LOLS needs to restart from intermediate states
@@ -231,29 +233,34 @@ and APPO reveal in every seed and reach the best policy in $\Pi$.
 <figcaption>Figure 4. Errors per episode with privileged information, computed exactly from each trained policy and averaged over seeds.</figcaption>
 </figure>
 
-## Case 2: a partly random expert
+## Case 2: a stochastic expert
 
 <figure>
-<img class="theme-light" src="../assets/future-aware-imitation/env-hard-light.svg" alt="Diagram: a root that hides z. Action 1 leads to an easy corridor if z is 1 and a recoverable corridor if z is 0. Action 0 leads to an easy corridor if z is 0 and a hard corridor, where the expert flips coins, if z is 1. Either action matches the expert half the time; downstream the expert plays 0 except in the hard corridor.">
-<img class="theme-dark" src="../assets/future-aware-imitation/env-hard-dark.svg" alt="Diagram: a root that hides z. Action 1 leads to an easy corridor if z is 1 and a recoverable corridor if z is 0. Action 0 leads to an easy corridor if z is 0 and a hard corridor, where the expert flips coins, if z is 1. Either action matches the expert half the time; downstream the expert plays 0 except in the hard corridor.">
-<figcaption>Figure 5. The partly-random-expert environment. Both root actions are wrong half the time, but only action 0's mistake leads to states where the expert acts randomly.</figcaption>
+<img class="theme-light" src="../assets/future-aware-imitation/env-hard-light.svg" alt="Diagram: at the root the expert flips a coin z. Action 1 leads to an easy corridor if z is 1 and a recoverable corridor if z is 0. Action 0 leads to an easy corridor if z is 0 and a hard corridor, where the expert keeps flipping coins, if z is 1. Either action matches the expert half the time; downstream the expert plays 0 except in the hard corridor.">
+<img class="theme-dark" src="../assets/future-aware-imitation/env-hard-dark.svg" alt="Diagram: at the root the expert flips a coin z. Action 1 leads to an easy corridor if z is 1 and a recoverable corridor if z is 0. Action 0 leads to an easy corridor if z is 0 and a hard corridor, where the expert keeps flipping coins, if z is 1. Either action matches the expert half the time; downstream the expert plays 0 except in the hard corridor.">
+<figcaption>Figure 5. The stochastic-expert environment. Both root actions match the expert's coin half the time, but only action 0's mistake leads to states where the expert keeps acting randomly.</figcaption>
 </figure>
 
-**Setup.** The root is as in case 1: the expert plays the hidden bit $z$, and the learner can't see it. What differs is
-where mistakes lead. A correct root action enters an easy corridor. The mistake "1 when $z = 0$" enters a recoverable
-corridor, and the mistake "0 when $z = 1$" a hard corridor. In the easy and recoverable corridors the expert always plays
-0; in the hard corridor it flips a fresh coin at every step. The learner sees which corridor it is in, so after the root
-it isn't missing any information; in the hard corridor nothing anyone could observe would predict the expert. This
-construction is more artificial than case 1, because the asymmetry is put into the expert directly.
+**Setup.** At the root the expert flips a fair coin $z$ and plays it. Nothing anyone observes predicts the coin, so
+whatever the learner does there, it matches the expert half the time. That is the same as in case 1, except that here the
+root is unpredictable because the expert is random, not because it sees something the learner doesn't. What differs from
+case 1 is where mistakes lead. Matching the expert's root action enters an easy corridor. The mistake "1 when the expert
+played 0" enters a recoverable corridor, and "0 when it played 1" a hard corridor. In the easy and recoverable corridors
+the expert always plays 0; in the hard corridor it keeps flipping a fresh coin at every step. The learner sees which
+corridor it is in. This construction is more artificial than case 1, because the asymmetry is put into the expert
+directly.
 
 **The two targets.**
 
-- *The expert's policy* plays $z$ at the root, then 0; it never enters the hard corridor. $J = 9$. It is not in $\Pi$:
-  it needs $z$ at the root.
-- *Its projection onto $\Pi$ (DAgger's):* each root action half the time, then 0 in the easy and recoverable corridors and a guess
-  in the hard one. It enters the hard corridor in a quarter of the episodes: $J = \tfrac{3}{4} \cdot 8 = 6$.
-- *The best policy in $\Pi$:* action 1 at the root, then 0. When $z = 0$ its root action is a mistake, but the
-  recoverable one; it never risks the hard corridor. $J = 0 + 8 = 8$.
+- *The expert's policy* flips a coin at the root and then plays 0: its own root choice always leads it into the easy
+  corridor. $J = 9$, since it always agrees with itself. No learner can reproduce its coin flips: a copy of its policy,
+  flipping its own coins, agrees with it only half the time at the root.
+- *Its projection onto $\Pi$ (DAgger's)* is exactly that copy: each root action half the time, then 0 in the easy and
+  recoverable corridors and a coin flip in the hard one. It enters the hard corridor in a quarter of the episodes:
+  $J = \tfrac{3}{4} \cdot 8 = 6$. Here the learner *can* represent the expert's policy, and the projection is the
+  expert's own distribution, yet it still isn't the best policy.
+- *The best policy in $\Pi$:* action 1 at the root, then 0. When the expert's coin says 0, its root action is a mistake,
+  but the recoverable one; it never risks the hard corridor. $J = 0 + 8 = 8$.
 
 **What each method sees at the root.**
 
@@ -275,7 +282,7 @@ $\tfrac{1}{2} + \tfrac{1}{4} + \tfrac{1}{4} \cdot P(\mathrm{Bin}(8, \tfrac{1}{2}
 
 **Results.**
 
-*Table 3. Partly random expert, 12 seeds. "Recoverable side" is the probability of root action 1, whose mistake is the
+*Table 3. Stochastic expert, 12 seeds. "Recoverable side" is the probability of root action 1, whose mistake is the
 recoverable one. The best policy in the learner's class makes 0.5 errors per episode with 100% success. ↑ higher is better, ↓ lower is better; the best value in each column is in bold.*
 
 | Method | Recoverable side ↑ | Errors ↓ | Success (%) ↑ | Errors, greedy ↓ |
@@ -290,7 +297,7 @@ AggreVaTe picks the recoverable side in 8 of 12 seeds, which is again chance: it
 <figure>
 <img class="theme-light" src="../assets/future-aware-imitation/root-hard-light.svg" alt="Probability of the recoverable side against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders as its seeds switch sides; LOLS and APPO rise to about 1.">
 <img class="theme-dark" src="../assets/future-aware-imitation/root-hard-dark.svg" alt="Probability of the recoverable side against simulated episodes, mean over seeds. DAgger stays at 0.5; AggreVaTe wanders as its seeds switch sides; LOLS and APPO rise to about 1.">
-<figcaption>Figure 6. The root decision during training with a partly random expert (mean over 12 seeds).</figcaption>
+<figcaption>Figure 6. The root decision during training with a stochastic expert (mean over 12 seeds).</figcaption>
 </figure>
 
 ## Case 3: limited capacity (distillation)
@@ -511,7 +518,7 @@ the last two rows evaluate the same degree-7 students against the stochastic tea
 
 ## What to take away
 
-- **When the learner can't represent the expert, the projection of the expert onto its class and the best policy in
+- **When the learner can't imitate the expert, the projection of the expert onto its class and the best policy in
   that class are different policies.** The best policy can deliberately disagree with the expert, for example to reveal
   information or to avoid states it can't handle. The projection can't: it is as close to the expert as the method's
   measure of closeness allows, wherever that leads.
