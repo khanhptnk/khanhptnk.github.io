@@ -52,13 +52,14 @@ methods get the same budget and the same tuning:
 <figcaption>Figure 1. Task success, meaning at most 2 disagreements with the expert in a 9-step episode (a metric no method trains on), mean over 12 seeds. Blue methods aim at the expert; orange ones at the learner's best policy. For limited capacity the student is a degree-1 polynomial; Figure 8 covers every size.</figcaption>
 </figure>
 
-*Table 1. In each setting, what the learner's best policy does differently from the expert, and which methods find it.*
+*Table 1. The learner's best first move in each setting, and which methods find it. DAgger and AggreVaTe aim at the
+expert; LOLS and APPO aim at the learner's best policy.*
 
-| Setting | The learner's best policy | DAgger, AggreVaTe (aim at the expert) | LOLS, APPO (aim at the learner's best) |
+| Setting | The learner's best first move | DAgger, AggreVaTe | LOLS, APPO |
 |---|---|---|---|
-| Privileged information | takes the action that reveals the hidden information, though it matches the expert only half the time | indifferent between revealing and not | reveal |
-| Partly random expert | makes the mistake after which the expert stays predictable | indifferent between the two mistakes | make the recoverable mistake |
-| Limited capacity | leaves the teacher's path at the first step, for a path the student can fit | follow the teacher | leave |
+| Privileged information | reveal the hidden information | indifferent | reveal |
+| Partly random expert | the mistake that avoids the random states | indifferent | make that mistake |
+| Limited capacity | leave the teacher's path | follow the teacher | leave |
 
 LOLS and APPO do equally well here; they differ in how they optimize, and LOLS needs to restart from intermediate states
 and try every action there, which is out of reach when the actions are a language model's vocabulary. The advantage of
@@ -111,12 +112,12 @@ The two targets differ exactly where these two differ.
 policy sees only $o_t$, every one of them, in effect, pools what it learns over the states that share an observation.
 What differs is **what** they pool:
 
-| Method | What an action is scored by | Who plays the rest | Aims at | Update |
-|---|---|---|---|---|
-| DAgger | matching the expert's action now | nobody | the expert's action | supervised fit |
-| AggreVaTe | the return from that step on, $Q^E$ | the expert | the expert's best action, $\arg\max_a A^E$ | cost-sensitive classifier |
-| LOLS ($\beta = 0$) | the return from that step on, $Q^\pi$, both actions tried from the same state | the learner | the learner's best policy | cost-sensitive classifier |
-| APPO | the episode's own return from that step on, $Q^\pi$ | the learner | the learner's best policy | clipped policy gradient |
+| Method | The value of an action | Aims at |
+|---|---|---|
+| DAgger | none: it fits the expert's action as a label | the expert's action |
+| AggreVaTe | $Q^E$, the return when the expert plays the rest | the expert's best action, $\arg\max_a A^E$ |
+| LOLS | $Q^\pi$, the return when the learner plays the rest, both actions tried | the learner's best policy |
+| APPO | $Q^\pi$, the episode's own return from that step on | the learner's best policy |
 
 AggreVaTe ([Ross & Bagnell, 2014](https://arxiv.org/abs/1406.5979)) picks a random step of a learner roll-out, takes a
 random action there, and lets the expert finish. LOLS ([Chang et al., 2015](https://arxiv.org/abs/1502.02206)) tries both
@@ -191,15 +192,16 @@ own future, $Q^\pi$, charges those later terms to the root action that causes th
 
 **Results.**
 
-*Table 2. Privileged information (mean ± standard deviation over 12 seeds; 50,000 evaluation episodes each). The
-learner's best policy makes 0.5 errors per episode with 100% success. "Greedy" plays each policy's more likely action.*
+*Table 2. Privileged information: mean ± standard deviation over 12 seeds, 50,000 evaluation episodes each. "Reveals" is
+the probability of the revealing action at the root; "greedy" plays each policy's more likely action. The learner's best
+policy makes 0.5 errors per episode with 100% success.*
 
-| Method | P(revealing action) | Errors / episode | Task success | Errors, greedy |
+| Method | Reveals | Errors | Success (%) | Errors, greedy |
 |---|---|---|---|---|
-| DAgger | 0.500 ± 0.001 | 2.50 ± 0.01 | 54.5% ± 0.2% | 1.84 ± 1.97 |
-| AggreVaTe | 0.50 ± 0.52 | 2.50 ± 2.09 | 75.0% ± 26.1% | 2.50 ± 2.09 |
-| LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
-| APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
+| DAgger | 0.500 ± 0.001 | 2.50 ± 0.01 | 54.5 ± 0.2 | 1.84 ± 1.97 |
+| AggreVaTe | 0.50 ± 0.52 | 2.50 ± 2.09 | 75.0 ± 26.1 | 2.50 ± 2.09 |
+| LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
+| APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
 
 DAgger lands exactly where the analysis puts it. Half its episodes take the revealing branch and succeed; the other half
 are 9 coin flips, which succeed with probability $P(\mathrm{Bin}(9, \tfrac{1}{2}) \le 2) = 46/512$, so its success rate is
@@ -261,15 +263,15 @@ $\tfrac{1}{2} + \tfrac{1}{4} + \tfrac{1}{4} \cdot P(\mathrm{Bin}(8, \tfrac{1}{2}
 
 **Results.**
 
-*Table 3. Partly random expert, 12 seeds. P(root action 1) is the probability of choosing the side whose mistake is
-recoverable; the learner's best policy makes 0.5 errors per episode with 100% success.*
+*Table 3. Partly random expert, 12 seeds. "Recoverable side" is the probability of root action 1, whose mistake is the
+recoverable one. The learner's best policy makes 0.5 errors per episode with 100% success.*
 
-| Method | P(root action 1) | Errors / episode | Task success | Errors, greedy |
+| Method | Recoverable side | Errors | Success (%) | Errors, greedy |
 |---|---|---|---|---|
-| DAgger | 0.500 ± 0.001 | 1.50 ± 0.01 | 75.9% ± 0.2% | 1.17 ± 0.98 |
-| AggreVaTe | 0.67 ± 0.49 | 1.16 ± 0.98 | 84.0% ± 23.7% | 1.16 ± 0.98 |
-| LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
-| APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0% ± 0.0% | 0.50 ± 0.00 |
+| DAgger | 0.500 ± 0.001 | 1.50 ± 0.01 | 75.9 ± 0.2 | 1.17 ± 0.98 |
+| AggreVaTe | 0.67 ± 0.49 | 1.16 ± 0.98 | 84.0 ± 23.7 | 1.16 ± 0.98 |
+| LOLS | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
+| APPO | 1.000 ± 0.000 | 0.50 ± 0.00 | 100.0 ± 0.0 | 0.50 ± 0.00 |
 
 AggreVaTe picks the recoverable side in 8 of 12 seeds, which is again chance: its estimated values tie.
 
@@ -366,7 +368,8 @@ represent, best by whichever divergence or reward is used. Six ways of training 
 - **Reverse KL with returns:** the same reward with undiscounted returns, which follows the gradient of the
   sequence-level reverse KL $\mathrm{KL}(P_S \,\|\, P_T)$ (the first row of Table 1 in the previous post), the objective
   at the core of [MiniLLM](https://arxiv.org/abs/2306.08543).
-- **APPO:** $+1$ for agreeing with the teacher's preferred action and $-1$ otherwise, as before.
+- **APPO:** $+1$ for agreeing with the teacher's preferred action and $-1$ otherwise, as before. It therefore trains
+  exactly as with the deterministic teacher; only the evaluation differs.
 
 The three RL objectives share APPO's update, and their learning rates are tuned by their own objectives: the
 sequence-level reverse KL for the reverse-KL ones, agreement for APPO. An episode has only $2 \times 2^8 = 512$ action
@@ -379,18 +382,19 @@ sequences, so every metric is computed exactly by summing over all of them.
 </figure>
 
 *Table 5. Stochastic teacher, student of degree 1 (12 seeds, exact evaluation). "Leave" is the probability of leaving
-the teacher's path at the root. Reverse KL is $\mathrm{KL}(P_S \Vert P_T)$ and forward KL is $\mathrm{KL}(P_T \Vert P_S)$,
-both over whole episodes, in nats. Standard deviations across seeds are below 0.01 except where shown.*
+the teacher's path at the root; errors are counted against the teacher's preferred action. Reverse KL is
+$\mathrm{KL}(P_S \Vert P_T)$ and forward KL is $\mathrm{KL}(P_T \Vert P_S)$, over whole episodes, in nats. Standard
+deviations across seeds are below 0.01 except where shown. † Stopped early by its tuning; see below.*
 
-| Objective | Leave | Errors | Success | Rev. KL | Fwd. KL |
+| Objective | Leave | Errors | Success (%) | Rev. KL | Fwd. KL |
 |---|---|---|---|---|---|
-| Teacher | 0.10 | 0.90 | 94.7% | 0 | 0 |
-| Off-policy KD | 0.100 | 3.64 | 23.1% | 3.49 | 2.54 |
-| On-policy forward KL | 0.100 | 3.64 | 23.1% | 3.49 | 2.54 |
-| On-policy JSD | 0.100 | 3.61 | 23.5% | 3.48 | 2.55 |
-| Reverse KL, discount 0 (stopped early; see below) | 0.376 | 3.25 | 34.7% | 2.74 | 2.75 |
-| Reverse KL, returns | 0.840 | 2.12 | 71.1% | 2.13 | 3.90 |
-| APPO | 1.000 | 1.00 | 100.0% | 3.15 | 50 ± 15 |
+| Teacher | 0.10 | 0.90 | 94.7 | 0 | 0 |
+| Off-policy KD | 0.100 | 3.64 | 23.1 | 3.49 | 2.54 |
+| On-policy forward KL | 0.100 | 3.64 | 23.1 | 3.49 | 2.54 |
+| On-policy JSD | 0.100 | 3.61 | 23.5 | 3.48 | 2.55 |
+| Reverse KL, discount 0 † | 0.376 | 3.25 | 34.7 | 2.74 | 2.75 |
+| Reverse KL, returns | 0.840 | 2.12 | 71.1 | 2.13 | 3.90 |
+| APPO | 1.000 | 1.00 | 100.0 | 3.15 | 50 ± 15 |
 
 - **Per-token objectives aim at the teacher, and follow it at every student size.** Off-policy KD, on-policy forward KL
   and on-policy JSD leave the teacher's path with the teacher's own probability, 0.1. This holds for any per-token
@@ -438,16 +442,18 @@ APPO's advantage is specific to choosing among unavoidable mistakes. The experim
   all: at the tuned step size the student's logits saturate within a few iterations, and at saturation the entropy
   gradient, $-\theta\, p(1 - p)$ for a logit $\theta$ with $p = \sigma(\theta)$, vanishes.
 
-*Table 6. APPO with an entropy bonus of weight $c$, at APPO's tuned step size (12 seeds). Errors per episode in each
-case; the last three columns are case 3 with the stochastic teacher and a degree-7 student, with the sequence-level
-KLs in nats.*
+*Table 6. APPO with an entropy bonus of weight $c$, at APPO's tuned step size (12 seeds). APPO trains identically with
+the deterministic and the stochastic teacher (its reward is agreement with the teacher's preferred action either way), so
+the last two rows evaluate the same degree-7 students against the stochastic teacher's distribution.*
 
-| $c$ | Case 1 | Case 2 | Case 3, degree 1 | Case 3, degree 7 | Stochastic, errors | Rev. KL | Fwd. KL |
-|---|---|---|---|---|---|---|---|
-| 0 | 0.50 | 0.50 | 1.00 | 0.06 | 0.06 | 0.74 | 5.26 |
-| 0.1 | 0.50 | 0.51 | 1.00 | 0.08 | 0.08 | 0.70 | 4.69 |
-| 0.3 | 1.27 | 1.34 | 1.00 | 0.14 | 0.14 | 0.58 | 3.45 |
-| 1 | 2.00 | 1.84 | 1.00 | 2.93 | 2.93 | 2.10 | 1.58 |
+| | $c = 0$ | $c = 0.1$ | $c = 0.3$ | $c = 1$ |
+|---|---|---|---|---|
+| Case 1: errors | 0.50 | 0.50 | 1.27 | 2.00 |
+| Case 2: errors | 0.50 | 0.51 | 1.34 | 1.84 |
+| Case 3, degree 1: errors | 1.00 | 1.00 | 1.00 | 1.00 |
+| Case 3, degree 7: errors (either teacher) | 0.06 | 0.08 | 0.14 | 2.93 |
+| Stochastic teacher: reverse KL (nats) | 0.74 | 0.70 | 0.58 | 2.10 |
+| Stochastic teacher: forward KL (nats) | 5.26 | 4.69 | 3.45 | 1.58 |
 
 ## Related work
 
